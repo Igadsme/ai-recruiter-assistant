@@ -1,0 +1,18 @@
+{
+  "name": "ai-recruiter-assistant",
+  "private": true,
+  "version": "1.0.0",
+  "description": "AI recruiter assistant for Imani Gad",
+  "packageManager": "pnpm@10.34.3",
+  "scripts": {
+    "dev": "node start-local.mjs",
+    "dev:frontend": "node ./frontend/node_modules/vite/bin/vite.js --config ./frontend/vite.config.ts --host 127.0.0.1 --port 5173 --strictPort",
+    "dev:backend": "node ./backend/node_modules/tsx/dist/cli.mjs ./backend/src/index.ts",
+    "build": "pnpm --filter frontend build && pnpm --filter backend build",
+    "start": "pnpm --filter backend start",
+    "test": "pnpm --filter backend test && pnpm --filter frontend test"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "protobufjs"]
+  }
+}

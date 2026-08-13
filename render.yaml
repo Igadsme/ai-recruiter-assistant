@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: imani-gad-ai-assistant
+    runtime: node
+    plan: starter
+    buildCommand: pnpm install && pnpm --filter frontend build && pnpm --filter backend build
+    startCommand: pnpm --filter backend start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash
+      - key: LOG_LEVEL
+        value: info

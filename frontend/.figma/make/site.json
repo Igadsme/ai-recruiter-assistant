@@ -1,0 +1,11 @@
+{
+  "title": "Imani Gad · AI Recruiter Assistant",
+  "description": "This AI assistant engages recruiters by providing detailed, evidence-backed insights into a candidate's skills, experience, and projects, enhancing hiring decisions.",
+  "robots": {
+    "index": true
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

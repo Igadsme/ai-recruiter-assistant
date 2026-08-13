@@ -38,7 +38,7 @@ export function createApp() {
   app.use(
     cors({
       origin: config.isProduction
-        ? [config.frontendUrl, /\.onrender\.com$/]
+        ? [config.frontendUrl, /\.onrender\.com$/, /\.vercel\.app$/]
         : [config.frontendUrl, 'http://localhost:5173', 'http://127.0.0.1:5173'],
       methods: ['GET', 'POST', 'OPTIONS'],
     }),

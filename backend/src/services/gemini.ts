@@ -36,7 +36,7 @@ export class GeminiClient implements LlmClient {
   async generate(input: GenerateChatInput): Promise<GeminiStructuredResponse> {
     if (!this.client) {
       const { GoogleGenAI } = await import('@google/genai')
-      this.client = new GoogleGenAI({ apiKey: this.apiKey }) as GeminiSdkClient
+      this.client = new GoogleGenAI({ apiKey: this.apiKey }) as unknown as GeminiSdkClient
     }
 
     const contents = [

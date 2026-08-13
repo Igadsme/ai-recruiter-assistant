@@ -5,8 +5,8 @@ export const CANDIDATE = {
   degree: 'B.S. Computer Science',
   graduation: 'December 2026',
   email: 'gad.imani@yahoo.com',
-  phone: '(404)-932-1821',
-  linkedin: 'linkedin.com/in/igad',
+  phone: '404-932-1821',
+  linkedin: 'https://www.linkedin.com/in/igad/',
   github: 'github.com/Igadsme',
 }
 
@@ -245,7 +245,7 @@ export const RESPONSES: Record<string, CannedResponse> = {
 
   whyHire: {
     intro:
-      "Here's the case, directly: Imani Gad has six roles of production experience, genuine AI and cybersecurity depth, and a history of building independently. He delivers measurable outcomes and is still early in his career — the upside is significant.",
+      "Imani Gad has six roles of production experience, genuine AI and cybersecurity depth, and a history of building independently. He delivers measurable outcomes and is still early in his career — the upside is significant.",
     sections: [
       {
         label: 'PRODUCTION TRACK RECORD',

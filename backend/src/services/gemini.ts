@@ -178,6 +178,8 @@ function buildUserTurn(input: GenerateChatInput): string {
   return [
     `Mode: ${input.mode}`,
     '',
+    'Write about Imani in the third person. Start the answer with "Imani is" or "Imani Gad is". Never start with "I". Use he/him.',
+    '',
     'Verified candidate context for this question:',
     input.context,
     '',

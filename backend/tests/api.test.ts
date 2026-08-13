@@ -85,6 +85,19 @@ describe('POST /api/chat', () => {
     expect(mockLlm.generate).toHaveBeenCalledTimes(1)
   })
 
+  it('rewrites first-person model replies into third person', async () => {
+    setLlmClientForTests({
+      generate: async () => ({
+        intro: 'I was born in Rwanda and I built services at UpCancer.',
+        sections: [],
+      }),
+    })
+
+    const response = await request(app).post('/api/chat').send({ message: 'Tell me about Imani Gad' })
+    expect(response.status).toBe(200)
+    expect(response.body.message).toBe('Imani was born in Rwanda and he built services at UpCancer.')
+  })
+
   it('returns a resume card payload without calling Gemini', async () => {
     const response = await request(app)
       .post('/api/chat')

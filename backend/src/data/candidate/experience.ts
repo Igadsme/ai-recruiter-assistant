@@ -25,9 +25,9 @@ export const experience: ExperienceEntry[] = [
     ],
     technologies: ['Python'],
     metrics: ['10 students mentored'],
-    why: 'I knew what it felt like to be new somewhere, and I wanted to help immigrant students gain real confidence — not just syntax.',
+    why: 'He knew what it felt like to be new somewhere, and he wanted to help immigrant students gain real confidence — not just syntax.',
     memory:
-      'I still remember watching a student who had struggled with English successfully finish and explain a Python project they built themselves. Seeing them go from hesitant to proudly presenting their work reminded me that teaching is about giving people confidence, not just technical skills.',
+      'He still remembers watching a student who had struggled with English successfully finish and explain a Python project they built themselves. Seeing them go from hesitant to proudly presenting their work reminded him that teaching is about giving people confidence, not just technical skills.',
     categories: ['teaching'],
   },
   {
@@ -42,7 +42,7 @@ export const experience: ExperienceEntry[] = [
     ],
     technologies: ['Python', 'TypeScript', 'PostgreSQL', 'Redis', 'REST APIs'],
     metrics: ['+15% throughput', '-20% latency'],
-    why: 'I wanted my first real software engineering experience and the chance to work on production systems that impacted real users.',
+    why: 'He wanted his first real software engineering experience and the chance to work on production systems that impacted real users.',
     categories: ['software'],
   },
   {
@@ -58,7 +58,7 @@ export const experience: ExperienceEntry[] = [
     ],
     technologies: ['React', 'CSS', 'HTML', 'Accessibility'],
     metrics: ['-30% load time'],
-    why: 'I wanted to learn how software supports real business operations and improve my backend engineering skills in a startup environment.',
+    why: 'He wanted to learn how software supports real business operations and improve his backend engineering skills in a startup environment.',
     categories: ['web'],
   },
   {
@@ -73,7 +73,7 @@ export const experience: ExperienceEntry[] = [
     ],
     technologies: ['Pinecone', 'Gemini API', 'Embeddings', 'RAG', 'Python'],
     metrics: ['5 AI projects', '500+ users/reach'],
-    why: 'I joined because I wanted to work alongside ambitious builders, strengthen my AI engineering skills, and ship projects quickly.',
+    why: 'He joined because he wanted to work alongside ambitious builders, strengthen his AI engineering skills, and ship projects quickly.',
     categories: ['ai', 'software'],
   },
   {
@@ -89,7 +89,7 @@ export const experience: ExperienceEntry[] = [
     ],
     technologies: ['ServiceNow', 'JavaScript', 'REST APIs', 'ITSM'],
     metrics: ['80% → 20% backlog', '200–300 tickets'],
-    why: 'I wanted exposure to enterprise-scale technology and to see how software improves healthcare operations.',
+    why: 'He wanted exposure to enterprise-scale technology and to see how software improves healthcare operations.',
     categories: ['enterprise', 'software'],
   },
   {
@@ -105,7 +105,7 @@ export const experience: ExperienceEntry[] = [
     ],
     technologies: ['Microsoft Sentinel', 'KQL', 'Palo Alto', 'CEF', 'Log Analytics'],
     metrics: [],
-    why: 'I wanted to understand how software and technology solve problems in large industrial organizations while learning from experienced engineers.',
+    why: 'He wanted to understand how software and technology solve problems in large industrial organizations while learning from experienced engineers.',
     categories: ['cybersecurity'],
   },
 ]

@@ -33,9 +33,11 @@ export async function handleChat(input: {
 
   const showEvidence = isEvidenceQuery(input.message)
   const isResume = generated.isResume || generated.intro.trim().toUpperCase().startsWith('RESUME')
-  const spoken = flattenChatMessage(isResume
-    ? generated.intro.replace(/^RESUME\s*/i, '').trim() || generated.intro
-    : generated.intro)
+  const spoken = enforceThirdPerson(
+    flattenChatMessage(isResume
+      ? generated.intro.replace(/^RESUME\s*/i, '').trim() || generated.intro
+      : generated.intro),
+  )
 
   const response: ChatResponse = {
     message: spoken,
@@ -57,6 +59,39 @@ function persistTurn(conversationId: string, userMessage: string, assistantMessa
 function flattenChatMessage(raw: string): string {
   const spoken = parseStructuredResponse(raw).intro.trim()
   return spoken || raw
+}
+
+export function enforceThirdPerson(text: string): string {
+  const trimmed = text.trim()
+  if (!trimmed) return trimmed
+
+  let out = rewriteOpening(trimmed)
+  out = out.replace(/([.!?]\s+)I\b/g, '$1He')
+  out = out
+    .replace(/\bI['’]m\b/g, "he's")
+    .replace(/\bI am\b/g, 'he is')
+    .replace(/\bI['’]ve\b/g, 'he has')
+    .replace(/\bI['’]d\b/g, "he'd")
+    .replace(/\bI['’]ll\b/g, "he'll")
+    .replace(/\bI\b/g, 'he')
+    .replace(/\bme\b/g, 'him')
+    .replace(/\bmyself\b/g, 'himself')
+    .replace(/\b[Mm]y\b/g, 'his')
+    .replace(/\bmine\b/g, 'his')
+  return out
+}
+
+function rewriteOpening(text: string): string {
+  if (/^Imani\b/i.test(text)) return text
+  if (/^I['’]m\b/i.test(text)) return text.replace(/^I['’]m\b/i, 'Imani is')
+  if (/^I am\b/i.test(text)) return text.replace(/^I am\b/i, 'Imani is')
+  if (/^I['’]ve\b/i.test(text)) return text.replace(/^I['’]ve\b/i, 'Imani has')
+  if (/^I['’]d\b/i.test(text)) return text.replace(/^I['’]d\b/i, 'Imani would')
+  if (/^I['’]ll\b/i.test(text)) return text.replace(/^I['’]ll\b/i, 'Imani will')
+  if (/^My name is\b/i.test(text)) return text.replace(/^My name is\b/i, 'Imani is')
+  if (/^My\b/i.test(text)) return text.replace(/^My\b/i, "Imani's")
+  if (/^I\b/i.test(text)) return text.replace(/^I\b/i, 'Imani')
+  return text
 }
 
 function buildResumeResponse(conversationId: string): ChatResponse {

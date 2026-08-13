@@ -8,6 +8,6 @@ export const activities = {
   hackathons: {
     participations: 12,
     wins: 6,
-    note: 'One of the things I am most proud of is consistently finishing projects under tight deadlines. Hackathons taught me how to prioritize, divide work across a team, and ship a working product even when everything does not go according to plan.',
+    note: 'One of the things he is most proud of is consistently finishing projects under tight deadlines. Hackathons taught him how to prioritize, divide work across a team, and ship a working product even when everything does not go according to plan.',
   },
 } as const

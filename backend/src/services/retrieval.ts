@@ -29,11 +29,13 @@ const STORY_KEYWORDS =
 const RESUME_KEYWORDS = /\b(resume|cv|download|pdf|document)\b/i
 const OVERVIEW_KEYWORDS =
   /\b(tell me about|overview|introduce|introduction|who is|60.second|summary)\b/i
+const CONTACT_KEYWORDS = /\b(contact|email|phone|linkedin|reach)\b/i
 
 export function analyzeQuery(query: string): CandidateCategory[] {
   const categories = new Set<CandidateCategory>()
 
   if (RESUME_KEYWORDS.test(query)) categories.add('resume')
+  if (CONTACT_KEYWORDS.test(query)) categories.add('profile')
   if (AI_KEYWORDS.test(query)) categories.add('ai')
   if (CYBER_KEYWORDS.test(query)) categories.add('cybersecurity')
   if (PROJECT_KEYWORDS.test(query)) categories.add('projects')
@@ -97,7 +99,7 @@ export function retrieveCandidateContext(query: string): {
 
   if (wantsOverview) {
     sections.push(
-      `PROFILE\nName: ${profile.name}\nTitle: ${profile.title}\nAvailability: ${profile.availability}`,
+      `PROFILE\nName: ${profile.name}\nTitle: ${profile.title}\nAvailability: ${profile.availability}\nEmail: ${profile.email}\nPhone: ${profile.phone}\nLinkedIn: ${profile.linkedin}`,
     )
   }
 
@@ -204,20 +206,20 @@ export function retrieveCandidateContext(query: string): {
   sections.push(
     [
       'HOW IMANI TALKS',
-      'Answer in first person as Imani. Sound like a person, not a resume. Use the personal story below whenever origin, motivation, teaching, or "who are you" is relevant.',
+      'Speak about Imani in the third person using he/him. Start answers with "Imani is" or "Imani Gad is". Never start with "I". Use the personal story below whenever origin, motivation, teaching, or "who is he" is relevant.',
     ].join('\n'),
   )
 
   if (include('story') || wantsOverview) {
     sections.push(
       [
-        "PERSONAL STORY (in Imani's words — use this voice and these facts)",
+        'PERSONAL STORY (third person — Imani is a man; use he/him)',
         story.inHisWords,
         '',
         `Languages at home: ${story.languagesAtHome.join(', ')}`,
         `Outside of software: ${story.hobbies.join('; ')}.`,
-        `How I work: ${story.team}`,
-        `What I am tired of people assuming: ${story.assumption}`,
+        `How he works: ${story.team}`,
+        `What he is tired of people assuming: ${story.assumption}`,
       ].join('\n'),
     )
     addSource({
@@ -247,8 +249,8 @@ function formatEducation(): string {
 function formatExperience(role: (typeof experience)[number]): string {
   return [
     `${role.role} — ${role.organization} (${formatDateRange(role.start, role.end)})`,
-    role.why ? `Why I took this: ${role.why}` : '',
-    role.memory ? `A moment I still remember: ${role.memory}` : '',
+    role.why ? `Why he took this: ${role.why}` : '',
+    role.memory ? `A moment he still remembers: ${role.memory}` : ''
     ...role.bullets.map((bullet) => `- ${bullet}`),
     `Technologies: ${role.technologies.join(', ')}`,
     role.metrics.length > 0 ? `Metrics: ${role.metrics.join(', ')}` : '',

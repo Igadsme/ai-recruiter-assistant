@@ -10,6 +10,7 @@ import {
   RECRUITER_CHIPS,
   THINKING_LABELS,
   CONTEXT_DATA,
+  CANDIDATE,
   type CannedResponse,
   type EvidenceItem,
 } from './data'
@@ -58,13 +59,13 @@ function toCannedResponse(result: ChatApiResponse, query: string): CannedRespons
 
 function spokenText(raw: string): string {
   const trimmed = raw.trim()
-  if (!trimmed.startsWith('{')) return trimmed
+  if (!trimmed.startsWith('{')) return toThirdPersonReply(trimmed)
   try {
     const parsed = JSON.parse(trimmed) as Record<string, unknown>
     for (const key of ['intro', 'Intro', 'message', 'Message']) {
       const value = parsed[key]
       if (typeof value === 'string' && value.trim() && !value.trim().startsWith('{')) {
-        return value.trim()
+        return toThirdPersonReply(value.trim())
       }
     }
     if (Array.isArray(parsed.sections)) {
@@ -78,9 +79,208 @@ function spokenText(raw: string): string {
         .join('\n\n')
     }
   } catch {
-    return trimmed
+    return toThirdPersonReply(trimmed)
   }
-  return trimmed
+  return toThirdPersonReply(trimmed)
+}
+
+function toThirdPersonReply(text: string): string {
+  let out = text.trim()
+  if (/^I['’]m\b/i.test(out)) out = out.replace(/^I['’]m\b/i, 'Imani is')
+  else if (/^I am\b/i.test(out)) out = out.replace(/^I am\b/i, 'Imani is')
+  else if (/^I['’]ve\b/i.test(out)) out = out.replace(/^I['’]ve\b/i, 'Imani has')
+  else if (/^My name is\b/i.test(out)) out = out.replace(/^My name is\b/i, 'Imani is')
+  else if (/^My\b/i.test(out)) out = out.replace(/^My\b/i, "Imani's")
+  else if (/^I\b/i.test(out)) out = out.replace(/^I\b/i, 'Imani')
+
+  out = out.replace(/([.!?]\s+)I\b/g, '$1He')
+  return out
+    .replace(/\bI['’]m\b/g, "he's")
+    .replace(/\bI am\b/g, 'he is')
+    .replace(/\bI['’]ve\b/g, 'he has')
+    .replace(/\bI['’]d\b/g, "he'd")
+    .replace(/\bI['’]ll\b/g, "he'll")
+    .replace(/\bI\b/g, 'he')
+    .replace(/\bme\b/g, 'him')
+    .replace(/\bmyself\b/g, 'himself')
+    .replace(/\b[Mm]y\b/g, 'his')
+    .replace(/\bmine\b/g, 'his')
+}
+
+function WorkInProgressFooter({
+  insetRight,
+  onResume,
+}: {
+  insetRight: number
+  onResume: () => void
+}) {
+  const [contactOpen, setContactOpen] = useState(false)
+  const contactRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!contactOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setContactOpen(false)
+    }
+    const onPointer = (event: MouseEvent) => {
+      if (contactRef.current && !contactRef.current.contains(event.target as Node)) {
+        setContactOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onPointer)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onPointer)
+    }
+  }, [contactOpen])
+
+  const linkStyle: React.CSSProperties = {
+    color: 'rgba(150,180,255,0.92)',
+    textDecoration: 'none',
+    wordBreak: 'break-all',
+  }
+
+  return (
+    <footer
+      ref={contactRef}
+      style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: insetRight,
+        zIndex: 50,
+        padding: '8px 20px 10px',
+        background: 'rgba(9,9,11,0.92)',
+        borderTop: '1px solid rgba(255,255,255,0.06)',
+        transition: 'right 0.38s cubic-bezier(0.22,1,0.36,1)',
+      }}
+    >
+      {contactOpen && (
+        <div
+          role="dialog"
+          aria-label="Imani Gad's contact information"
+          style={{
+            position: 'absolute',
+            bottom: 'calc(100% + 10px)',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 'min(360px, calc(100% - 32px))',
+            padding: '14px 16px 16px',
+            background: 'rgba(14,14,18,0.98)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            borderRadius: 12,
+            boxShadow: '0 12px 40px rgba(0,0,0,0.45)',
+          }}
+        >
+          <p
+            style={{
+              margin: '0 0 12px',
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 10,
+              letterSpacing: '0.12em',
+              color: 'rgba(255,255,255,0.42)',
+            }}
+          >
+            CONTACT
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <ContactRow label="Email">
+              <a href={`mailto:${CANDIDATE.email}`} style={linkStyle}>
+                {CANDIDATE.email}
+              </a>
+            </ContactRow>
+            <ContactRow label="Phone number">
+              <a href={`tel:${CANDIDATE.phone.replace(/-/g, '')}`} style={linkStyle}>
+                {CANDIDATE.phone}
+              </a>
+            </ContactRow>
+            <ContactRow label="LinkedIn">
+              <a
+                href={CANDIDATE.linkedin}
+                target="_blank"
+                rel="noreferrer"
+                style={linkStyle}
+              >
+                {CANDIDATE.linkedin}
+              </a>
+            </ContactRow>
+          </div>
+        </div>
+      )}
+      <p
+        style={{
+          margin: 0,
+          textAlign: 'center',
+          fontSize: 11.5,
+          lineHeight: 1.45,
+          fontWeight: 380,
+          color: 'rgba(255,255,255,0.38)',
+          letterSpacing: '-0.01em',
+          maxWidth: 720,
+          marginInline: 'auto',
+        }}
+      >
+        Work in Progress: I'm still learning the ropes! If I ever get confused or hallucinate
+        details, check out Imani's{' '}
+        <button
+          type="button"
+          onClick={() => {
+            setContactOpen(false)
+            onResume()
+          }}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            color: 'rgba(150,180,255,0.85)',
+            textDecoration: 'underline',
+            cursor: 'pointer',
+            font: 'inherit',
+          }}
+        >
+          official resume
+        </button>{' '}
+        above or{' '}
+        <button
+          type="button"
+          onClick={() => setContactOpen((open) => !open)}
+          aria-expanded={contactOpen}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            color: 'rgba(150,180,255,0.85)',
+            textDecoration: 'underline',
+            cursor: 'pointer',
+            font: 'inherit',
+          }}
+        >
+          reach out to him directly
+        </button>
+        .
+      </p>
+    </footer>
+  )
+}
+
+function ContactRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <span
+        style={{
+          fontSize: 11,
+          color: 'rgba(255,255,255,0.40)',
+          fontWeight: 450,
+        }}
+      >
+        {label}:
+      </span>
+      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.82)', lineHeight: 1.35 }}>
+        {children}
+      </span>
+    </div>
+  )
 }
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
@@ -1584,7 +1784,7 @@ export default function App() {
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: '48px 24px 64px',
+              padding: '48px 24px 96px',
             }}
           >
             <div
@@ -1646,7 +1846,7 @@ export default function App() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: 48,
+              padding: '48px 24px 96px',
             }}
           >
             <VoiceView
@@ -1668,7 +1868,7 @@ export default function App() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: 48,
+              padding: '48px 24px 96px',
             }}
           >
             <ThinkingView lastQuery={lastQuery} />
@@ -1683,7 +1883,7 @@ export default function App() {
               style={{
                 flex: 1,
                 overflowY: 'auto',
-                paddingBottom: 168,
+                paddingBottom: 220,
               }}
             >
               <div
@@ -1717,10 +1917,11 @@ export default function App() {
             <div
               style={{
                 position: 'fixed',
-                bottom: 0,
+                bottom: 52,
                 left: 0,
                 right: isContextOpen ? 252 : 0,
-                padding: '20px 24px 28px',
+                zIndex: 45,
+                padding: '20px 24px 16px',
                 background: 'linear-gradient(to top, rgba(9,9,11,1) 55%, rgba(9,9,11,0) 100%)',
                 transition: 'right 0.38s cubic-bezier(0.22,1,0.36,1)',
               }}
@@ -1742,6 +1943,11 @@ export default function App() {
 
       {/* ── Context panel ── */}
       {isContextOpen && <ContextPanel onClose={() => setIsContextOpen(false)} />}
+
+      <WorkInProgressFooter
+        insetRight={isContextOpen ? 252 : 0}
+        onResume={() => void handleQuery('resume')}
+      />
     </div>
   )
 }

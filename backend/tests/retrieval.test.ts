@@ -29,6 +29,13 @@ describe('retrieveCandidateContext', () => {
     expect(result.sources.some((source) => source.organization === 'Shaw Industries')).toBe(true)
   })
 
+  it('includes contact details when asked how to reach him', () => {
+    const result = retrieveCandidateContext('How can I reach Imani?')
+    expect(result.context).toContain('gad.imani@yahoo.com')
+    expect(result.context).toContain('404-932-1821')
+    expect(result.context).toContain('https://www.linkedin.com/in/igad/')
+  })
+
   it('attaches technologies and metrics to experience sources', () => {
     const result = retrieveCandidateContext("What's his software engineering experience?")
     const upcancer = result.sources.find((source) => source.organization === 'UpCancer')
@@ -52,12 +59,12 @@ describe('parseStructuredResponse', () => {
   it('extracts spoken text when Gemini uses capital JSON keys', () => {
     const parsed = parseStructuredResponse(
       JSON.stringify({
-        Intro: 'I was born in Rwanda.',
+        Intro: 'Imani is a Computer Science student who was born in Rwanda.',
         sections: [{ Label: 'WORK', Body: 'I interned at UpCancer.', tags: [] }],
         IsResume: false,
       }),
     )
-    expect(parsed.intro).toBe('I was born in Rwanda.')
+    expect(parsed.intro).toBe('Imani is a Computer Science student who was born in Rwanda.')
   })
 
   it('falls back to plain text when JSON is invalid', () => {

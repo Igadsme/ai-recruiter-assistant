@@ -37,7 +37,7 @@ describe('App chat', () => {
     expect(await screen.findByText('THINKING')).toBeInTheDocument()
 
     resolveChat({
-      message: 'I was born in Rwanda and grew up in a Congolese household.',
+      message: 'Imani is a Computer Science student who was born in Rwanda and grew up in a Congolese household.',
       sections: [
         {
           label: 'SOFTWARE ENGINEERING',
@@ -118,5 +118,30 @@ describe('App chat', () => {
     await user.click(screen.getAllByRole('button', { name: 'Ask: Tell me about Imani Gad' })[0])
 
     expect(await screen.findByRole('alert')).toHaveTextContent('request limit')
+  })
+
+  it('shows a work-in-progress footer on the idle page', () => {
+    render(<App />)
+    expect(screen.getByText(/Work in Progress: I'm still learning the ropes/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /official resume/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /reach out to him directly/i })).toBeInTheDocument()
+  })
+
+  it('shows Imani Gad contact details from the footer', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /reach out to him directly/i }))
+
+    expect(screen.getByRole('dialog', { name: /contact information/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'gad.imani@yahoo.com' })).toHaveAttribute(
+      'href',
+      'mailto:gad.imani@yahoo.com',
+    )
+    expect(screen.getByRole('link', { name: '404-932-1821' })).toHaveAttribute('href', 'tel:4049321821')
+    expect(screen.getByRole('link', { name: 'https://www.linkedin.com/in/igad/' })).toHaveAttribute(
+      'href',
+      'https://www.linkedin.com/in/igad/',
+    )
   })
 })

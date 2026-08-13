@@ -250,7 +250,7 @@ function formatExperience(role: (typeof experience)[number]): string {
   return [
     `${role.role} — ${role.organization} (${formatDateRange(role.start, role.end)})`,
     role.why ? `Why he took this: ${role.why}` : '',
-    role.memory ? `A moment he still remembers: ${role.memory}` : ''
+    role.memory ? `A moment he still remembers: ${role.memory}` : '',
     ...role.bullets.map((bullet) => `- ${bullet}`),
     `Technologies: ${role.technologies.join(', ')}`,
     role.metrics.length > 0 ? `Metrics: ${role.metrics.join(', ')}` : '',

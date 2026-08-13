@@ -3,14 +3,14 @@ import { config } from './config.ts'
 import { logger } from './logger.ts'
 import { createApp } from './app.ts'
 
-console.log('[api] starting Express on 127.0.0.1:' + config.port)
+console.log('[api] starting Express on ' + config.host + ':' + config.port)
 console.log('[api] gemini model', config.geminiModel)
 
 const app = createApp()
 
-const server = app.listen(config.port, '127.0.0.1', () => {
-  console.log('[api] listening on http://127.0.0.1:' + config.port)
-  logger.info({ port: config.port, env: config.nodeEnv }, 'api server started')
+const server = app.listen(config.port, config.host, () => {
+  console.log('[api] listening on http://' + config.host + ':' + config.port)
+  logger.info({ port: config.port, host: config.host, env: config.nodeEnv }, 'api server started')
   void import('@google/genai')
     .then(() => console.log('[api] gemini sdk ready'))
     .catch((error: unknown) => {

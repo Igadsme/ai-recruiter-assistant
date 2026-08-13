@@ -34,6 +34,9 @@ export const config = {
   get port() {
     return Number(process.env.PORT ?? 3001)
   },
+  get host() {
+    return this.isProduction ? '0.0.0.0' : '127.0.0.1'
+  },
   get nodeEnv() {
     return process.env.NODE_ENV ?? 'development'
   },

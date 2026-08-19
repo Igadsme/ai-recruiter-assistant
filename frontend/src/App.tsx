@@ -14,8 +14,20 @@ import {
   type CannedResponse,
   type EvidenceItem,
 } from './data'
-import { getErrorMessage, sendChat, type ChatApiResponse, type ChatMode } from './services/api'
+import { getErrorMessage, sendChat, trackEvent, type ChatApiResponse, type ChatMode, type RecruiterSession } from './services/api'
 import { useSpeechRecognition } from './hooks/useSpeechRecognition'
+import { useSpeechSynthesis } from './hooks/useSpeechSynthesis'
+import { RecruiterBriefCard } from './components/RecruiterBrief'
+import { SourcesList } from './components/SourcesList'
+import { ProjectDeepDiveCard } from './components/ProjectDeepDiveCard'
+import { FitPanel } from './components/FitPanel'
+import { InterviewPanel } from './components/InterviewPanel'
+import { CareerTimeline } from './components/CareerTimeline'
+import { RecruiterSessionPanel } from './components/RecruiterSessionPanel'
+import { AnalyticsDashboard } from './components/AnalyticsDashboard'
+import { ContactCta, FollowUps, RetrievalActivity, VerifiedBadge } from './components/ChatExtras'
+import { DifferentiatorsCard, RecruiterSummaryCard } from './components/RecruiterCards'
+import { HeaderChip } from './components/ui'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,30 +42,34 @@ type Message = {
   error?: boolean
 }
 
-function toCannedResponse(result: ChatApiResponse, query: string): CannedResponse {
-  const wantsEvidence = /\b(evidence|sources?|proof|cite|citations?|show (me )?(the )?(work|roles|jobs|experience))\b/i.test(
-    query,
-  )
-  const evidence: EvidenceItem[] =
-    wantsEvidence && !result.isResume
-      ? result.sources
-          .filter((source) => source.type === 'experience' || source.type === 'project')
-          .map((source, index) => ({
-            id: `${source.type}-${index}-${source.title}`,
-            company: source.organization ?? source.title,
-            role: source.type === 'project' ? 'Project' : source.title,
-            period: source.date ?? '',
-            description: source.relevantExcerpt ?? '',
-            tags: source.technologies ?? [],
-            metrics: source.metrics,
-          }))
-      : []
+function toCannedResponse(result: ChatApiResponse, _query: string): CannedResponse {
+  const evidence: EvidenceItem[] = (result.sources ?? [])
+    .filter((source) => source.type === 'experience' || source.type === 'project')
+    .map((source, index) => ({
+      id: source.id ?? `${source.type}-${index}-${source.title}`,
+      company: source.organization ?? source.title,
+      role: source.type === 'project' ? 'Project' : source.title,
+      period: source.date ?? '',
+      description: source.relevantExcerpt ?? '',
+      tags: source.technologies ?? [],
+      metrics: source.metrics,
+    }))
 
   return {
     intro: spokenText(result.message),
     sections: result.isResume ? result.sections ?? [] : [],
     evidence,
     isResume: result.isResume,
+    sources: result.sources,
+    verified: result.verified,
+    verificationNote: result.verificationNote,
+    followUps: result.followUps,
+    retrievalStages: result.retrievalStages,
+    recruiterSummary: result.recruiterSummary,
+    projectDeepDive: result.projectDeepDive,
+    differentiators: result.differentiators,
+    showContactCta: result.showContactCta,
+    session: result.session,
   }
 }
 
@@ -627,7 +643,10 @@ function ResumeCard() {
         {/* Action buttons */}
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           <button
-            onClick={() => setPreviewing((p) => !p)}
+            onClick={() => {
+              setPreviewing((p) => !p)
+              if (!previewing) void trackEvent('resume_viewed')
+            }}
             aria-expanded={previewing}
             aria-label={previewing ? 'Close resume preview' : 'Preview resume'}
             style={{
@@ -649,6 +668,7 @@ function ResumeCard() {
           <a
             href="/IMANI_GAD.pdf"
             download="Imani_Gad_Resume.pdf"
+            onClick={() => void trackEvent('resume_downloaded')}
             aria-label="Download Imani Gad resume PDF"
             style={{
               fontFamily: "'DM Mono', monospace",
@@ -808,22 +828,39 @@ function EvidenceCard({ item }: { item: EvidenceItem }) {
 function AssistantMessage({
   msg,
   isNew,
+  onAsk,
+  onResume,
+  onContact,
+  voiceEnabled,
 }: {
   msg: Message
   isNew: boolean
+  onAsk: (query: string) => void
+  onResume: () => void
+  onContact: () => void
+  voiceEnabled: boolean
 }) {
   const r = msg.response
   const fullIntro = r?.intro ?? msg.text
   const sections = r?.sections ?? []
   const evidence = r?.evidence ?? []
+  const sources = r?.sources ?? []
 
   const [displayedIntro, setDisplayedIntro] = useState(isNew ? '' : fullIntro)
   const [visibleSections, setVisibleSections] = useState(isNew ? 0 : sections.length)
   const [evidenceVisible, setEvidenceVisible] = useState(!isNew)
   const [streaming, setStreaming] = useState(isNew)
+  const { speak, supported } = useSpeechSynthesis()
 
   useEffect(() => {
     if (!isNew) return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) {
+      setDisplayedIntro(fullIntro)
+      setStreaming(false)
+      setVisibleSections(sections.length)
+      setEvidenceVisible(true)
+      return
+    }
     let i = 0
     const iv = setInterval(() => {
       i++
@@ -840,12 +877,18 @@ function AssistantMessage({
     return () => clearInterval(iv)
   }, []) // eslint-disable-line
 
+  useEffect(() => {
+    if (isNew && voiceEnabled && supported && fullIntro && !streaming) {
+      speak(fullIntro)
+    }
+  }, [isNew, voiceEnabled, supported, fullIntro, streaming, speak])
+
   return (
     <div
       className="animate-fade-up"
       style={{ width: '100%', maxWidth: 680 }}
     >
-      {/* Streaming intro */}
+      {r && <VerifiedBadge verified={r.verified !== false} note={r.verificationNote} />}
       <p
         className={streaming ? 'streaming-cursor' : ''}
         style={{
@@ -903,8 +946,20 @@ function AssistantMessage({
         </div>
       )}
 
+      {r && evidenceVisible && (
+        <>
+          {r.retrievalStages && r.retrievalStages.length > 0 && (
+            <RetrievalActivity stages={r.retrievalStages} />
+          )}
+          {r.recruiterSummary && <RecruiterSummaryCard summary={r.recruiterSummary} />}
+          {r.differentiators && <DifferentiatorsCard groups={r.differentiators} />}
+          {r.projectDeepDive && <ProjectDeepDiveCard project={r.projectDeepDive} />}
+          {sources.length > 0 && <SourcesList sources={sources} />}
+        </>
+      )}
+
       {/* Evidence */}
-      {evidence.length > 0 && evidenceVisible && (
+      {evidence.length > 0 && evidenceVisible && sources.length === 0 && (
         <div className="animate-fade-in" style={{ marginTop: 20 }}>
           <div
             className="flex items-center gap-3"
@@ -930,6 +985,13 @@ function AssistantMessage({
         <div className="animate-fade-in">
           <ResumeCard />
         </div>
+      )}
+
+      {evidenceVisible && r?.followUps && r.followUps.length > 0 && (
+        <FollowUps prompts={r.followUps} onSelect={onAsk} />
+      )}
+      {evidenceVisible && r?.showContactCta && (
+        <ContactCta onResume={onResume} onContact={onContact} />
       )}
     </div>
   )
@@ -1537,6 +1599,14 @@ function ConversationChips({
 // ─── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/analytics')) {
+    return <AnalyticsDashboard />
+  }
+
+  return <AssistantShell />
+}
+
+function AssistantShell() {
   const [appState, setAppState] = useState<AppState>('idle')
   const [messages, setMessages] = useState<Message[]>([])
   const [latestAssistantId, setLatestAssistantId] = useState<string | null>(null)
@@ -1545,12 +1615,23 @@ export default function App() {
   const [isRecruiterMode, setIsRecruiterMode] = useState(false)
   const [isVoiceMode, setIsVoiceMode] = useState(false)
   const [voiceMuted, setVoiceMuted] = useState(false)
+  const [voiceOut, setVoiceOut] = useState(false)
   const [conversationId, setConversationId] = useState<string | undefined>(undefined)
+  const [session, setSession] = useState<RecruiterSession | undefined>(undefined)
+  const [overlay, setOverlay] = useState<'fit' | 'interview' | 'timeline' | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const speech = useSpeechRecognition({ active: isVoiceMode, muted: voiceMuted })
 
+  useEffect(() => {
+    if (sessionStorage.getItem('visit-tracked') === '1') return
+    sessionStorage.setItem('visit-tracked', '1')
+    void trackEvent('portfolio_visit')
+  }, [])
+
   const chips = isRecruiterMode ? RECRUITER_CHIPS : DEFAULT_CHIPS
   const mode: ChatMode = isRecruiterMode ? 'recruiter' : 'general'
+  const lastFollowUps = [...messages].reverse().find((msg) => msg.role === 'assistant' && msg.response?.followUps)?.response?.followUps
+  const convoChips = lastFollowUps && lastFollowUps.length > 0 ? lastFollowUps : chips
 
   const handleQuery = useCallback(
     async (query: string) => {
@@ -1573,6 +1654,8 @@ export default function App() {
           mode,
         })
         setConversationId(result.conversationId)
+        if (result.session) setSession(result.session)
+        if (messages.length === 0) void trackEvent('chat_started')
         const response = toCannedResponse(result, trimmed)
         const aMsg: Message = {
           id: crypto.randomUUID(),
@@ -1597,7 +1680,7 @@ export default function App() {
         setAppState('conversation')
       }
     },
-    [appState, isVoiceMode, conversationId, mode],
+    [appState, isVoiceMode, conversationId, mode, messages.length],
   )
 
   const handleNew = () => {
@@ -1606,6 +1689,7 @@ export default function App() {
     setAppState('idle')
     setIsContextOpen(false)
     setConversationId(undefined)
+    setSession(undefined)
   }
 
   const handleVoiceStop = () => {
@@ -1702,47 +1786,32 @@ export default function App() {
         </div>
 
         {/* Right: recruiter + context */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <HeaderChip
+            active={isRecruiterMode}
             onClick={() => setIsRecruiterMode((r) => !r)}
-            aria-pressed={isRecruiterMode}
-            aria-label="Toggle recruiter mode"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 7,
-              fontFamily: "'DM Mono', monospace",
-              fontSize: 10,
-              letterSpacing: '0.12em',
-              fontWeight: isRecruiterMode ? 500 : 400,
-              color: isRecruiterMode ? 'rgba(110,168,255,0.90)' : 'rgba(255,255,255,0.38)',
-              background: isRecruiterMode ? 'rgba(110,168,255,0.10)' : 'rgba(255,255,255,0.04)',
-              border: `1px solid ${isRecruiterMode ? 'rgba(110,168,255,0.28)' : 'rgba(255,255,255,0.08)'}`,
-              borderRadius: 999,
-              padding: '6px 14px',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-            }}
+            label="Toggle recruiter mode"
           >
-            <span
-              style={{
-                width: 5,
-                height: 5,
-                borderRadius: '50%',
-                background: isRecruiterMode ? 'rgba(110,168,255,0.9)' : 'rgba(255,255,255,0.28)',
-                display: 'inline-block',
-                flexShrink: 0,
-                transition: 'background 0.2s',
-              }}
-            />
             RECRUITER
-          </button>
+          </HeaderChip>
+          <HeaderChip active={overlay === 'fit'} onClick={() => setOverlay('fit')} label="Open fit analysis">
+            FIT
+          </HeaderChip>
+          <HeaderChip active={overlay === 'interview'} onClick={() => setOverlay('interview')} label="Simulate an interview">
+            INTERVIEW
+          </HeaderChip>
+          <HeaderChip active={overlay === 'timeline'} onClick={() => setOverlay('timeline')} label="Open career timeline">
+            TIMELINE
+          </HeaderChip>
+          <HeaderChip active={voiceOut} onClick={() => setVoiceOut((value) => !value)} label="Toggle spoken answers">
+            {voiceOut ? 'VOICE' : 'TEXT'}
+          </HeaderChip>
 
           {inConvo && (
             <button
               onClick={() => setIsContextOpen((o) => !o)}
               aria-pressed={isContextOpen}
-              aria-label="Toggle candidate context panel"
+              aria-label="Toggle recruiter session panel"
               style={{
                 fontFamily: "'DM Mono', monospace",
                 fontSize: 10,
@@ -1756,7 +1825,7 @@ export default function App() {
                 transition: 'all 0.2s',
               }}
             >
-              CONTEXT
+              SESSION
             </button>
           )}
         </div>
@@ -1794,11 +1863,22 @@ export default function App() {
                 alignItems: 'center',
                 gap: 28,
                 width: '100%',
-                maxWidth: 580,
+                maxWidth: isRecruiterMode ? 640 : 580,
               }}
             >
-              <Orb orbState="idle" />
+              {!isRecruiterMode && <Orb orbState="idle" />}
 
+              {isRecruiterMode ? (
+                <RecruiterBriefCard
+                  onAsk={() => {
+                    const el = document.querySelector<HTMLInputElement>('[aria-label="Ask about Imani Gad"]')
+                    el?.focus()
+                  }}
+                  onFit={() => setOverlay('fit')}
+                  onInterview={() => setOverlay('interview')}
+                  onTimeline={() => setOverlay('timeline')}
+                />
+              ) : (
               <div style={{ textAlign: 'center' }}>
                 <h1
                   style={{
@@ -1823,6 +1903,7 @@ export default function App() {
                   Ask me about Imani Gad's experience, skills, projects, or story.
                 </p>
               </div>
+              )}
 
               <div style={{ width: '100%' }}>
                 <ChatInput
@@ -1906,6 +1987,10 @@ export default function App() {
                       key={msg.id}
                       msg={msg}
                       isNew={msg.id === latestAssistantId}
+                      onAsk={handleQuery}
+                      onResume={() => void handleQuery('resume')}
+                      onContact={() => void handleQuery('How can I contact Imani Gad?')}
+                      voiceEnabled={voiceOut}
                     />
                   ),
                 )}
@@ -1933,7 +2018,7 @@ export default function App() {
                   disabled={appState === 'thinking'}
                 />
                 <div style={{ marginTop: 10 }}>
-                  <ConversationChips chips={chips} onSelect={handleQuery} />
+                  <ConversationChips chips={convoChips} onSelect={handleQuery} />
                 </div>
               </div>
             </div>
@@ -1942,7 +2027,30 @@ export default function App() {
       </main>
 
       {/* ── Context panel ── */}
-      {isContextOpen && <ContextPanel onClose={() => setIsContextOpen(false)} />}
+      {isContextOpen && (
+        <RecruiterSessionPanel session={session} onClose={() => setIsContextOpen(false)} />
+      )}
+
+      {overlay === 'fit' && (
+        <FitPanel
+          conversationId={conversationId}
+          onClose={() => setOverlay(null)}
+          onAsk={(query) => {
+            setOverlay(null)
+            void handleQuery(query)
+          }}
+        />
+      )}
+      {overlay === 'interview' && <InterviewPanel onClose={() => setOverlay(null)} />}
+      {overlay === 'timeline' && (
+        <CareerTimeline
+          onClose={() => setOverlay(null)}
+          onAsk={(query) => {
+            setOverlay(null)
+            void handleQuery(query)
+          }}
+        />
+      )}
 
       <WorkInProgressFooter
         insetRight={isContextOpen ? 252 : 0}

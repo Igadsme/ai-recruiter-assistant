@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from '../src/app.ts'
 import { resetConversationsForTests } from '../src/services/conversation.ts'
 import { setLlmClientForTests } from '../src/services/gemini.ts'
+import { resetAnalyticsForTests } from '../src/services/analytics.ts'
 import type { LlmClient } from '../src/services/gemini.ts'
 
 const app = createApp()
@@ -23,6 +24,7 @@ const mockLlm: LlmClient = {
 
 beforeEach(() => {
   resetConversationsForTests()
+  resetAnalyticsForTests()
   setLlmClientForTests(mockLlm)
   vi.clearAllMocks()
 })
@@ -81,7 +83,11 @@ describe('POST /api/chat', () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     )
     expect(response.body.sections).toEqual([])
-    expect(response.body.sources).toEqual([])
+    expect(response.body.sources.length).toBeGreaterThan(0)
+    expect(response.body.sources.some((source: { title: string }) => /DevDash|Headstarter|Camera/i.test(source.title + (source as { organization?: string }).organization))).toBe(true)
+    expect(response.body.verified).toBe(true)
+    expect(response.body.followUps.length).toBeGreaterThan(0)
+    expect(response.body.recruiterSummary).toBeDefined()
     expect(mockLlm.generate).toHaveBeenCalledTimes(1)
   })
 
@@ -169,5 +175,50 @@ describe('candidate endpoints', () => {
     expect(experience.body.experience.length).toBeGreaterThan(0)
     expect(projects.body.projects.some((item: { title: string }) => item.title === 'DevDash')).toBe(true)
     expect(skills.body.skills.languages).toContain('Python')
+  })
+
+  it('returns a recruiter brief', async () => {
+    const response = await request(app).get('/api/candidate/brief')
+    expect(response.status).toBe(200)
+    expect(response.body.brief.candidate).toBe('Imani Gad')
+    expect(response.body.brief.graduation).toBe('December 2026')
+  })
+})
+
+describe('POST /api/fit', () => {
+  it('classifies strong, partial, and missing technologies from a job description', async () => {
+    const response = await request(app)
+      .post('/api/fit')
+      .send({
+        jobDescription:
+          'Software Engineer — Python, AWS, React, PostgreSQL, Docker, TypeScript, Kubernetes, Terraform',
+      })
+
+    expect(response.status).toBe(200)
+    const { analysis } = response.body
+    expect(analysis.strong.map((item: { technology: string }) => item.technology)).toEqual(
+      expect.arrayContaining(['Python', 'React', 'PostgreSQL', 'TypeScript']),
+    )
+    expect(analysis.partial.map((item: { technology: string }) => item.technology)).toEqual(
+      expect.arrayContaining(['AWS', 'Docker']),
+    )
+    expect(analysis.missing).toEqual(expect.arrayContaining(['Kubernetes', 'Terraform']))
+    expect(analysis.relevantProjects.some((item: { title: string }) => item.title === 'DevDash')).toBe(
+      true,
+    )
+  })
+})
+
+describe('GET /api/analytics', () => {
+  it('rejects missing keys', async () => {
+    const response = await request(app).get('/api/analytics')
+    expect(response.status).toBe(401)
+  })
+
+  it('returns totals with the analytics key', async () => {
+    await request(app).post('/api/analytics/events').send({ type: 'portfolio_visit' })
+    const response = await request(app).get('/api/analytics').set('x-analytics-key', 'test-analytics')
+    expect(response.status).toBe(200)
+    expect(response.body.totals.visitors).toBeGreaterThan(0)
   })
 })

@@ -14,6 +14,8 @@ export type GenerateChatInput = {
   mode: ChatMode
   context: string
   history: ConversationMessage[]
+  verified?: boolean
+  verificationNote?: string
 }
 
 export type LlmClient = {
@@ -175,16 +177,28 @@ function isRetryableGeminiError(error: unknown): boolean {
 }
 
 function buildUserTurn(input: GenerateChatInput): string {
+  const followUp = input.history.length > 0
   return [
     `Mode: ${input.mode}`,
+    `Verification: ${input.verified === false ? 'NOT VERIFIED' : 'VERIFIED'}`,
+    input.verificationNote ? `Verification note: ${input.verificationNote}` : '',
     '',
-    'Write about Imani in the third person. Start the answer with "Imani is" or "Imani Gad is". Never start with "I". Use he/him.',
+    followUp
+      ? 'This is a follow-up. Stay in third person (he/him). Do not restart the biography. Do not force the sentence to begin with "Imani is" unless that is the natural answer. Answer the question directly and name the evidence.'
+      : 'Write about Imani in the third person. Start the first answer with "Imani is" or "Imani Gad is". Never start with "I". Use he/him.',
+    '',
+    'Name specific roles and projects from the context. If the fact is not in the context, say it is not verified.',
+    input.mode === 'recruiter'
+      ? 'Recruiter mode: tighter, evidence-first, no filler. Recruiters already have the brief — do not repeat his full life story unless asked.'
+      : '',
     '',
     'Verified candidate context for this question:',
     input.context,
     '',
     `Recruiter question: ${input.message}`,
-  ].join('\n')
+  ]
+    .filter((line) => line !== '')
+    .join('\n')
 }
 
 function stripCodeFences(raw: string): string {

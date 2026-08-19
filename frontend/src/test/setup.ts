@@ -19,6 +19,14 @@ HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
 
 window.HTMLElement.prototype.scrollIntoView = vi.fn()
 
+Object.defineProperty(window, 'speechSynthesis', {
+  writable: true,
+  value: {
+    speak: vi.fn(),
+    cancel: vi.fn(),
+  },
+})
+
 if (typeof globalThis.crypto?.randomUUID !== 'function') {
   Object.defineProperty(globalThis, 'crypto', {
     configurable: true,

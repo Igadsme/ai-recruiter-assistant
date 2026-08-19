@@ -61,4 +61,7 @@ export const config = {
   get chatRateLimitMax() {
     return Number(process.env.CHAT_RATE_LIMIT_MAX ?? 15)
   },
+  get analyticsKey() {
+    return process.env.ANALYTICS_KEY ?? ''
+  },
 }

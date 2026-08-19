@@ -42,6 +42,22 @@ describe('retrieveCandidateContext', () => {
     expect(upcancer?.technologies).toContain('PostgreSQL')
     expect(upcancer?.metrics).toContain('+15% throughput')
   })
+
+  it('expands backend questions to APIs, PostgreSQL, Redis, and relevant projects', () => {
+    const result = retrieveCandidateContext('Does he have backend experience?')
+    const blob = result.sources
+      .map((source) => `${source.organization ?? ''} ${source.title} ${(source.technologies ?? []).join(' ')}`)
+      .join(' ')
+    expect(blob).toMatch(/UpCancer/)
+    expect(blob).toMatch(/PostgreSQL|Redis|FastAPI/i)
+    expect(result.expandedTerms).toEqual(expect.arrayContaining(['api', 'postgresql', 'redis']))
+  })
+
+  it('marks unverified technologies such as Kubernetes', () => {
+    const result = retrieveCandidateContext('Does Imani have Kubernetes experience?')
+    expect(result.verified).toBe(false)
+    expect(result.verificationNote).toMatch(/Kubernetes/i)
+  })
 })
 
 describe('parseStructuredResponse', () => {

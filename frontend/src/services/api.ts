@@ -1,13 +1,16 @@
 export type ChatMode = 'general' | 'recruiter'
 
 export type Source = {
+  id?: string
   type: string
+  category?: string
   title: string
   organization?: string
   date?: string
   technologies?: string[]
   metrics?: string[]
   relevantExcerpt?: string
+  verified?: boolean
 }
 
 export type ChatSection = {
@@ -17,12 +20,140 @@ export type ChatSection = {
   metrics?: string[]
 }
 
+export type RetrievalStage = {
+  id: string
+  label: string
+  status: 'pending' | 'done' | 'skipped'
+}
+
+export type RecruiterSummary = {
+  relevantExperience: string
+  aiExperience: string
+  backendExperience: string
+  frontendExperience: string
+  education: string
+  graduation: string
+  suggestedInterviewTopics: string[]
+}
+
+export type DifferentiatorGroup = {
+  heading: string
+  items: Array<{ label: string; evidence: string; sourceIds: string[] }>
+}
+
+export type ProjectDeepDive = {
+  id: string
+  title: string
+  subtitle: string
+  problem: string
+  solution: string
+  architectureSummary: string
+  architecture: {
+    nodes: Array<{ id: string; label: string; detail: string; row: number; column: number }>
+    edges: Array<{ from: string; to: string }>
+  }
+  contributed: string[]
+  challenges: string[]
+  impact: string[]
+  technologies: string[]
+  github?: string
+}
+
+export type RecruiterSession = {
+  interests: string[]
+  questionsAsked: number
+  projectsViewed: string[]
+  experienceViewed: string[]
+  resumeViewed: boolean
+  resumeDownloaded: boolean
+  githubClicked: boolean
+  contactClicked: boolean
+  exploring: string
+}
+
 export type ChatApiResponse = {
   message: string
   sections: ChatSection[]
   sources: Source[]
   conversationId: string
   isResume?: boolean
+  verified?: boolean
+  verificationNote?: string
+  followUps?: string[]
+  retrievalStages?: RetrievalStage[]
+  recruiterSummary?: RecruiterSummary
+  projectDeepDive?: ProjectDeepDive
+  differentiators?: DifferentiatorGroup[]
+  showContactCta?: boolean
+  session?: RecruiterSession
+}
+
+export type RecruiterBrief = {
+  candidate: string
+  title: string
+  education: string
+  graduation: string
+  focus: string[]
+  coreTechnologies: string[]
+  relevantExperienceCount: number
+  relevantExperienceLabel: string
+  aiProjectCount: number
+  bestFitRoles: string[]
+  availability: string
+  email: string
+  phone: string
+  linkedin: string
+  github: string
+}
+
+export type TimelineNode = {
+  id: string
+  year: string
+  title: string
+  organization: string
+  detail: string
+  sourceId: string
+}
+
+export type FitAnalysis = {
+  roleHint: string
+  strong: Array<{ technology: string; evidence: string; sourceIds: string[] }>
+  partial: Array<{ technology: string; evidence: string; sourceIds: string[] }>
+  missing: string[]
+  relevantProjects: Array<{ id: string; title: string; reason: string }>
+  interviewQuestions: string[]
+}
+
+export type InterviewTrack = {
+  id: string
+  label: string
+  blurb: string
+}
+
+export type InterviewResponse = {
+  conversationId: string
+  track: string
+  question: string
+  phase: 'ask' | 'followup' | 'wrap'
+  sourceId?: string
+  followUps: string[]
+}
+
+export type AnalyticsSummary = {
+  windowDays: number
+  totals: {
+    visitors: number
+    chatStarted: number
+    questions: number
+    resumeViewed: number
+    resumeDownloaded: number
+    projectViewed: number
+    githubClicked: number
+    contactClicked: number
+    fitAnalyzed: number
+    interviewStarted: number
+  }
+  mostAsked: Array<{ query: string; count: number }>
 }
 
 export type ApiErrorCode = 'rate_limit' | 'network' | 'unavailable' | 'ai' | 'empty' | 'unknown'
@@ -61,6 +192,10 @@ export function getErrorMessage(error: unknown): { code: ApiErrorCode; message: 
   }
 }
 
+async function parseJson<T>(response: Response): Promise<T> {
+  return (await response.json()) as T
+}
+
 export async function sendChat(input: {
   message: string
   conversationId?: string
@@ -91,12 +226,14 @@ export async function sendChat(input: {
     }
 
     const chat = payload as ChatApiResponse
-    const wantsEvidence = isEvidenceQuery(input.message)
     return {
       ...chat,
       message: flattenSpokenReply(chat.message),
       sections: chat.isResume ? chat.sections ?? [] : [],
-      sources: wantsEvidence ? chat.sources ?? [] : [],
+      sources: chat.sources ?? [],
+      followUps: chat.followUps ?? [],
+      retrievalStages: chat.retrievalStages ?? [],
+      verified: chat.verified !== false,
     }
   } catch (error) {
     if (error instanceof ApiError) throw error
@@ -109,16 +246,96 @@ export async function sendChat(input: {
   }
 }
 
+export async function fetchBrief(): Promise<RecruiterBrief> {
+  const response = await fetch(`${API_BASE}/api/candidate/brief`)
+  if (!response.ok) throw new ApiError('network', NETWORK_ERROR, response.status)
+  const payload = await parseJson<{ brief: RecruiterBrief }>(response)
+  return payload.brief
+}
+
+export async function fetchTimeline(): Promise<TimelineNode[]> {
+  const response = await fetch(`${API_BASE}/api/candidate/timeline`)
+  if (!response.ok) throw new ApiError('network', NETWORK_ERROR, response.status)
+  const payload = await parseJson<{ timeline: TimelineNode[] }>(response)
+  return payload.timeline
+}
+
+export async function fetchProject(id: string): Promise<ProjectDeepDive> {
+  const response = await fetch(`${API_BASE}/api/candidate/projects/${id}`)
+  if (!response.ok) throw new ApiError('network', NETWORK_ERROR, response.status)
+  const payload = await parseJson<{ project: ProjectDeepDive }>(response)
+  return payload.project
+}
+
+export async function fetchSource(id: string): Promise<Source> {
+  const response = await fetch(`${API_BASE}/api/candidate/sources/${encodeURIComponent(id)}`)
+  if (!response.ok) throw new ApiError('network', NETWORK_ERROR, response.status)
+  const payload = await parseJson<{ source: Source }>(response)
+  return payload.source
+}
+
+export async function analyzeJob(jobDescription: string, conversationId?: string): Promise<FitAnalysis> {
+  const response = await fetch(`${API_BASE}/api/fit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jobDescription, conversationId }),
+  })
+  if (!response.ok) throw mapHttpError(response.status)
+  const payload = await parseJson<{ analysis: FitAnalysis }>(response)
+  return payload.analysis
+}
+
+export async function fetchInterviewTracks(): Promise<InterviewTrack[]> {
+  const response = await fetch(`${API_BASE}/api/interview/tracks`)
+  if (!response.ok) throw new ApiError('network', NETWORK_ERROR, response.status)
+  const payload = await parseJson<{ tracks: InterviewTrack[] }>(response)
+  return payload.tracks
+}
+
+export async function sendInterview(input: {
+  track: string
+  message?: string
+  conversationId?: string
+}): Promise<InterviewResponse> {
+  const response = await fetch(`${API_BASE}/api/interview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) throw mapHttpError(response.status)
+  return parseJson<InterviewResponse>(response)
+}
+
+export async function trackEvent(
+  type: string,
+  extra?: { query?: string; conversationId?: string },
+): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/api/analytics/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, ...extra }),
+    })
+  } catch {
+    // Analytics must never block the recruiter UI.
+  }
+}
+
+export async function fetchAnalytics(key: string): Promise<AnalyticsSummary> {
+  const response = await fetch(`${API_BASE}/api/analytics`, {
+    headers: { 'x-analytics-key': key },
+  })
+  if (response.status === 401) throw new ApiError('unknown', 'Invalid analytics key.', 401)
+  if (!response.ok) throw new ApiError('network', NETWORK_ERROR, response.status)
+  return parseJson<AnalyticsSummary>(response)
+}
+
 export async function createConversation(): Promise<{ id: string }> {
   const response = await fetch(`${API_BASE}/api/conversations`, { method: 'POST' })
   if (!response.ok) {
     throw new ApiError('network', NETWORK_ERROR, response.status)
   }
   return response.json() as Promise<{ id: string }>
-}
-
-function isEvidenceQuery(query: string): boolean {
-  return /\b(evidence|sources?|proof|cite|citations?)\b/i.test(query)
 }
 
 function flattenSpokenReply(raw: string): string {

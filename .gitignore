@@ -16,3 +16,6 @@ logs/
 .tmp-*
 .DS_Store
 coverage/
+.data/
+backend/.data/
+

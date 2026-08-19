@@ -17,3 +17,5 @@ services:
         value: gemini-flash-lite-latest
       - key: LOG_LEVEL
         value: info
+      - key: ANALYTICS_KEY
+        sync: false

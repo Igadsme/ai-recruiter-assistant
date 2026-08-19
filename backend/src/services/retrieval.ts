@@ -8,14 +8,562 @@ import {
   skills,
   story,
 } from '../data/candidate/index.ts'
-import type { CandidateCategory, Source } from '../types.ts'
+import type { CandidateCategory, RetrievalStage, Source, SourceType } from '../types.ts'
+
+export type RetrievalResult = {
+  categories: CandidateCategory[]
+  intents: CandidateCategory[]
+  context: string
+  sources: Source[]
+  stages: RetrievalStage[]
+  verified: boolean
+  verificationNote?: string
+  expandedTerms: string[]
+  projectId?: string
+}
+
+type Chunk = {
+  id: string
+  type: SourceType
+  category: string
+  title: string
+  organization?: string
+  date?: string
+  technologies: string[]
+  metrics: string[]
+  excerpt: string
+  text: string
+  aliases: string[]
+  categories: CandidateCategory[]
+}
+
+const TECH_INVENTORY = buildTechInventory()
+
+const QUERY_EXPANSION: Record<string, string[]> = {
+  backend: ['api', 'apis', 'server', 'servers', 'microservice', 'microservices', 'postgresql', 'postgres', 'redis', 'node', 'nodejs', 'fastapi', 'rest', 'database', 'databases', 'sql'],
+  frontend: ['react', 'next.js', 'nextjs', 'css', 'html', 'ui', 'accessibility', 'responsive'],
+  ai: ['artificial', 'intelligence', 'machine', 'learning', 'ml', 'llm', 'rag', 'embedding', 'embeddings', 'pinecone', 'gemini', 'openai', 'yolo', 'yolov8', 'computer', 'vision', 'vector'],
+  cybersecurity: ['cyber', 'security', 'sentinel', 'kql', 'palo', 'alto', 'siem', 'syslog', 'cef', 'firewall'],
+  databases: ['postgresql', 'postgres', 'mysql', 'mongodb', 'cassandra', 'redis', 'prisma', 'sql'],
+  cloud: ['aws', 'docker', 'deploy', 'deployment'],
+  intern: ['internship', 'internships', 'co-op', 'coop', 'fellow', 'fellowship', 'role', 'job'],
+}
+
+const STOPWORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'on', 'for', 'with', 'his', 'he', 'him',
+  'does', 'do', 'did', 'has', 'have', 'what', 'which', 'who', 'about', 'tell', 'me', 'imani',
+  'gad', 'please', 'can', 'you', 'your',
+])
+
+function buildTechInventory(): Set<string> {
+  const values = [
+    ...skills.languages,
+    ...skills.frameworks,
+    ...skills.tools,
+    ...experience.flatMap((role) => role.technologies),
+    ...projects.flatMap((project) => project.technologies),
+    'REST APIs',
+    'RAG',
+    'Embeddings',
+  ]
+  return new Set(values.map(normalizeTech))
+}
+
+function normalizeTech(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9+#]/g, '')
+}
+
+const CHUNKS: Chunk[] = buildChunks()
+const DOC_TOKENS = CHUNKS.map((chunk) => tokenize(`${chunk.text} ${chunk.aliases.join(' ')}`))
+const IDF = buildIdf(DOC_TOKENS)
+const CHUNK_VECTORS = DOC_TOKENS.map((tokens) => sparseTfidf(tokens))
+
+function buildChunks(): Chunk[] {
+  const chunks: Chunk[] = [
+    {
+      id: 'profile:imani',
+      type: 'story',
+      category: 'Profile',
+      title: 'Candidate profile',
+      excerpt: `${profile.name} · ${profile.title} · ${profile.availability}`,
+      text: `PROFILE ${profile.name} ${profile.title} ${profile.availability} ${profile.email} ${profile.phone} ${profile.linkedin} ${profile.github}`,
+      technologies: [],
+      metrics: [],
+      aliases: ['contact', 'email', 'phone', 'linkedin', 'availability', 'hire'],
+      categories: ['profile', 'contact'],
+    },
+    {
+      id: 'education:ksu',
+      type: 'education',
+      category: 'Education',
+      title: education.degree,
+      organization: education.school,
+      date: `Expected ${education.expectedGraduation}`,
+      excerpt: `Relevant coursework: ${education.coursework.join(', ')}.`,
+      text: `EDUCATION ${education.degree} ${education.school} graduation ${education.expectedGraduation} coursework ${education.coursework.join(' ')} computer science kennesaw ksu`,
+      technologies: [...education.coursework],
+      metrics: [],
+      aliases: ['school', 'university', 'degree', 'graduate', 'graduation'],
+      categories: ['education', 'profile'],
+    },
+    {
+      id: 'skill:languages',
+      type: 'skill',
+      category: 'Skills',
+      title: 'Languages',
+      excerpt: skills.languages.join(', '),
+      text: `LANGUAGES ${skills.languages.join(' ')}`,
+      technologies: [...skills.languages],
+      metrics: [],
+      aliases: ['language', 'coding', 'programming'],
+      categories: ['skills'],
+    },
+    {
+      id: 'skill:frameworks',
+      type: 'skill',
+      category: 'Skills',
+      title: 'Frameworks',
+      excerpt: skills.frameworks.join(', '),
+      text: `FRAMEWORKS ${skills.frameworks.join(' ')} react node next pytorch tensorflow flask`,
+      technologies: [...skills.frameworks],
+      metrics: [],
+      aliases: ['framework', 'library', 'stack'],
+      categories: ['skills', 'frontend', 'backend', 'ai'],
+    },
+    {
+      id: 'skill:tools',
+      type: 'skill',
+      category: 'Skills',
+      title: 'Tools and platforms',
+      excerpt: skills.tools.join(', '),
+      text: `TOOLS ${skills.tools.join(' ')} postgresql aws docker mysql`,
+      technologies: [...skills.tools],
+      metrics: [],
+      aliases: ['cloud', 'database', 'aws', 'docker'],
+      categories: ['skills', 'backend'],
+    },
+    {
+      id: 'activity:orgs',
+      type: 'activity',
+      category: 'Activities',
+      title: 'Student organizations',
+      excerpt: `Member of ${activities.organizations.join(', ')}.`,
+      text: `ACTIVITIES ${activities.organizations.join(' ')} ieee shpe colorstack ai club leadership community`,
+      technologies: [],
+      metrics: [],
+      aliases: ['club', 'organization', 'leadership'],
+      categories: ['activities'],
+    },
+    {
+      id: 'activity:hackathons',
+      type: 'activity',
+      category: 'Activities',
+      title: 'Hackathons',
+      excerpt: `${activities.hackathons.participations} participations, ${activities.hackathons.wins} wins. ${activities.hackathons.note}`,
+      text: `HACKATHONS ${activities.hackathons.participations} participations ${activities.hackathons.wins} wins ${activities.hackathons.note}`,
+      technologies: [],
+      metrics: [
+        `${activities.hackathons.wins} hackathon wins`,
+        `${activities.hackathons.participations} hackathon participations`,
+      ],
+      aliases: ['hackathon', 'deadline', 'ship'],
+      categories: ['activities', 'why_hire'],
+    },
+    {
+      id: 'story:background',
+      type: 'story',
+      category: 'Story',
+      title: 'Personal background',
+      date: `Moved to the United States in ${story.movedToUnitedStates}`,
+      excerpt: story.summary,
+      text: `STORY ${story.inHisWords} ${story.summary} rwanda congo congolese swahili kinyarwanda immigrant 2018`,
+      technologies: [],
+      metrics: [],
+      aliases: ['born', 'rwanda', 'background', 'life', 'story', 'who'],
+      categories: ['story', 'profile'],
+    },
+    {
+      id: 'story:teaching',
+      type: 'story',
+      category: 'Story',
+      title: 'Teaching memory',
+      excerpt: story.teachingMemory,
+      text: `TEACHING ${story.teachingMemory} lutheran mentor instructor`,
+      technologies: ['Python'],
+      metrics: [],
+      aliases: ['teach', 'mentor', 'student'],
+      categories: ['story', 'why_hire', 'activities'],
+    },
+  ]
+
+  for (const role of experience) {
+    chunks.push({
+      id: `experience:${role.id}`,
+      type: 'experience',
+      category: 'Experience',
+      title: role.role,
+      organization: role.organization,
+      date: formatDateRange(role.start, role.end),
+      excerpt: role.bullets.join(' '),
+      text: [
+        role.role,
+        role.organization,
+        role.bullets.join(' '),
+        role.technologies.join(' '),
+        role.why ?? '',
+        role.memory ?? '',
+        role.categories.join(' '),
+      ].join(' '),
+      technologies: [...role.technologies],
+      metrics: [...role.metrics],
+      aliases: [role.organization, role.id, ...role.categories],
+      categories: [
+        'experience',
+        ...(role.categories.includes('ai') ? (['ai'] as const) : []),
+        ...(role.categories.includes('cybersecurity') ? (['cybersecurity'] as const) : []),
+        ...(role.categories.includes('web') ? (['frontend'] as const) : []),
+        ...(role.categories.includes('software') || role.categories.includes('enterprise')
+          ? (['backend'] as const)
+          : []),
+      ],
+    })
+  }
+
+  for (const project of projects) {
+    chunks.push({
+      id: `project:${project.id}`,
+      type: 'project',
+      category: 'Projects',
+      title: project.title,
+      organization: project.subtitle,
+      date: formatDateRange(project.start, project.end),
+      excerpt: project.bullets.join(' '),
+      text: [
+        project.title,
+        project.subtitle,
+        project.bullets.join(' '),
+        project.problem,
+        project.solution,
+        project.technologies.join(' '),
+        project.contributed.join(' '),
+        project.categories.join(' '),
+      ].join(' '),
+      technologies: [...project.technologies],
+      metrics: [...project.metrics],
+      aliases: [project.id, 'project', 'built', 'saas', 'portfolio'],
+      categories: ['projects', ...(project.categories.includes('ai') ? (['ai'] as const) : [])],
+    })
+  }
+
+  return chunks
+}
+
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9+#./]+/g, ' ')
+    .split(/\s+/)
+    .map((token) => token.replace(/^\.+|\.+$/g, ''))
+    .filter((token) => token.length > 1 && !STOPWORDS.has(token))
+}
+
+function buildIdf(docs: string[][]): Map<string, number> {
+  const df = new Map<string, number>()
+  for (const tokens of docs) {
+    for (const term of new Set(tokens)) {
+      df.set(term, (df.get(term) ?? 0) + 1)
+    }
+  }
+  const idf = new Map<string, number>()
+  for (const [term, count] of df) {
+    idf.set(term, Math.log((docs.length + 1) / (count + 1)) + 1)
+  }
+  return idf
+}
+
+function sparseTfidf(tokens: string[]): Map<string, number> {
+  const freq = new Map<string, number>()
+  for (const token of tokens) freq.set(token, (freq.get(token) ?? 0) + 1)
+  const vector = new Map<string, number>()
+  const len = Math.max(tokens.length, 1)
+  for (const [term, count] of freq) {
+    vector.set(term, (count / len) * (IDF.get(term) ?? 1))
+  }
+  return vector
+}
+
+function sparseCosine(a: Map<string, number>, b: Map<string, number>): number {
+  const [smaller, larger] = a.size <= b.size ? [a, b] : [b, a]
+  let dot = 0
+  let magA = 0
+  let magB = 0
+  for (const value of a.values()) magA += value * value
+  for (const value of b.values()) magB += value * value
+  for (const [term, value] of smaller) {
+    const other = larger.get(term)
+    if (other) dot += value * other
+  }
+  if (!magA || !magB) return 0
+  return dot / (Math.sqrt(magA) * Math.sqrt(magB))
+}
+
+function expandQuery(query: string): string[] {
+  const base = tokenize(query)
+  const expanded = new Set(base)
+  for (const token of base) {
+    const extras = QUERY_EXPANSION[token]
+    if (extras) {
+      for (const extra of extras) expanded.add(extra)
+    }
+    for (const [key, values] of Object.entries(QUERY_EXPANSION)) {
+      if (values.includes(token)) expanded.add(key)
+    }
+  }
+  return [...expanded]
+}
+
+export function analyzeQuery(query: string): CandidateCategory[] {
+  const intents = new Set<CandidateCategory>()
+
+  if (RESUME_KEYWORDS.test(query)) intents.add('resume')
+  if (CONTACT_KEYWORDS.test(query)) intents.add('contact')
+  if (AI_KEYWORDS.test(query)) intents.add('ai')
+  if (CYBER_KEYWORDS.test(query)) intents.add('cybersecurity')
+  if (BACKEND_KEYWORDS.test(query)) intents.add('backend')
+  if (FRONTEND_KEYWORDS.test(query)) intents.add('frontend')
+  if (WHY_HIRE_KEYWORDS.test(query)) intents.add('why_hire')
+  if (PROJECT_KEYWORDS.test(query) || PROJECT_NAME.test(query)) intents.add('projects')
+  if (EXPERIENCE_KEYWORDS.test(query)) intents.add('experience')
+  if (SKILL_KEYWORDS.test(query)) intents.add('skills')
+  if (EDUCATION_KEYWORDS.test(query)) intents.add('education')
+  if (ACTIVITY_KEYWORDS.test(query)) intents.add('activities')
+  if (STORY_KEYWORDS.test(query) || OVERVIEW_KEYWORDS.test(query)) {
+    intents.add('story')
+    intents.add('profile')
+  }
+
+  if (intents.has('ai') && !CYBER_KEYWORDS.test(query)) intents.delete('cybersecurity')
+
+  if (intents.size === 0) {
+    intents.add('profile')
+    intents.add('experience')
+    intents.add('skills')
+  }
+
+  return [...intents]
+}
+
+export function retrieveCandidateContext(query: string): RetrievalResult {
+  const intents = analyzeQuery(query)
+  const expandedTerms = expandQuery(query)
+  const queryVector = sparseTfidf(expandedTerms)
+  const ranked = CHUNKS.map((chunk, index) => {
+    const keywordScore = keywordRank(expandedTerms, chunk)
+    const semanticScore = sparseCosine(queryVector, CHUNK_VECTORS[index])
+    const intentBoost = intentScore(intents, chunk)
+    const penalty = intentPenalty(intents, chunk)
+    return {
+      chunk,
+      score: 0.5 * keywordScore + 0.35 * semanticScore + 0.15 * intentBoost - penalty,
+    }
+  })
+    .sort((a, b) => b.score - a.score)
+
+  const minScore = 0.08
+  let selected = ranked.filter((item) => item.score >= minScore).slice(0, 10)
+
+  if (intents.includes('ai') && !intents.includes('cybersecurity')) {
+    selected = selected.filter(
+      (item) => !item.chunk.categories.includes('cybersecurity') || item.chunk.categories.includes('ai'),
+    )
+  }
+
+  if (selected.length === 0) {
+    selected = ranked.slice(0, 4)
+  }
+
+  const alwaysInclude = CHUNKS.filter((chunk) => {
+    if (intents.includes('contact') && chunk.id === 'profile:imani') return true
+    if ((intents.includes('education') || intents.includes('resume')) && chunk.id === 'education:ksu') return true
+    if (intents.includes('why_hire') && chunk.id.startsWith('story:')) return true
+    return false
+  })
+  for (const chunk of alwaysInclude) {
+    if (!selected.some((item) => item.chunk.id === chunk.id)) {
+      selected.push({ chunk, score: 1 })
+    }
+  }
+
+  if (intents.includes('ai')) {
+    for (const chunk of CHUNKS) {
+      if (chunk.categories.includes('ai') && !selected.some((item) => item.chunk.id === chunk.id)) {
+        selected.push({ chunk, score: 0.9 })
+      }
+    }
+  }
+
+  const sources = selected.map(({ chunk }) => toSource(chunk))
+  const context = buildContext(selected.map((item) => item.chunk), intents)
+  const askedUnknown = unknownTechnologies(query)
+  const verified = askedUnknown.length === 0
+  const verificationNote = verified
+    ? undefined
+    : `Not verified: the candidate file does not confirm experience with ${askedUnknown.join(', ')}.`
+
+  return {
+    categories: intents,
+    intents,
+    context,
+    sources: dedupeSources(sources),
+    stages: buildStages(intents, selected.map((item) => item.chunk)),
+    verified,
+    verificationNote,
+    expandedTerms,
+    projectId: inferProjectId(query),
+  }
+}
+
+function inferProjectId(query: string): string | undefined {
+  if (/devdash/i.test(query)) return 'devdash'
+  if (/camera|investigator|cctv|yolo/i.test(query)) return 'securitycam'
+  return undefined
+}
+
+function keywordRank(terms: string[], chunk: Chunk): number {
+  const haystack = tokenize(`${chunk.text} ${chunk.aliases.join(' ')} ${chunk.technologies.join(' ')}`)
+  const hayset = new Set(haystack)
+  let hits = 0
+  for (const term of terms) {
+    if (hayset.has(term)) hits += 1
+    else if (haystack.some((token) => token.includes(term) || term.includes(token))) hits += 0.5
+  }
+  return hits / Math.max(terms.length, 1)
+}
+
+function intentScore(intents: CandidateCategory[], chunk: Chunk): number {
+  if (chunk.categories.some((category) => intents.includes(category))) return 1
+  return 0
+}
+
+function intentPenalty(intents: CandidateCategory[], chunk: Chunk): number {
+  if (intents.includes('ai') && !intents.includes('cybersecurity') && chunk.categories.includes('cybersecurity')) {
+    return 0.6
+  }
+  return 0
+}
+
+function unknownTechnologies(query: string): string[] {
+  const mentioned = [...query.matchAll(/\b[A-Za-z][A-Za-z0-9+#.]{1,24}\b/g)].map((match) => match[0])
+  const interesting = mentioned.filter((token) => {
+    const normalized = normalizeTech(token)
+    if (normalized.length < 3) return false
+    return KNOWN_JD_TECH.has(normalized) && !TECH_INVENTORY.has(normalized)
+  })
+  return [...new Set(interesting)]
+}
+
+const KNOWN_JD_TECH = new Set(
+  [
+    'kubernetes',
+    'k8s',
+    'terraform',
+    'ansible',
+    'graphql',
+    'kafka',
+    'spark',
+    'hadoop',
+    'scala',
+    'golang',
+    'go',
+    'rust',
+    'swift',
+    'ruby',
+    'php',
+    'django',
+    'spring',
+    'vue',
+    'svelte',
+    'azure',
+    'gcp',
+    'snowflake',
+    'databricks',
+    'helm',
+    'istio',
+  ].map(normalizeTech),
+)
+
+function toSource(chunk: Chunk): Source {
+  return {
+    id: chunk.id,
+    type: chunk.type,
+    category: chunk.category,
+    title: chunk.title,
+    organization: chunk.organization,
+    date: chunk.date,
+    technologies: chunk.technologies.length > 0 ? chunk.technologies : undefined,
+    metrics: chunk.metrics.length > 0 ? chunk.metrics : undefined,
+    relevantExcerpt: chunk.excerpt,
+    verified: true,
+  }
+}
+
+function dedupeSources(sources: Source[]): Source[] {
+  const seen = new Set<string>()
+  const result: Source[] = []
+  for (const source of sources) {
+    if (seen.has(source.id)) continue
+    seen.add(source.id)
+    result.push(source)
+  }
+  return result
+}
+
+function buildContext(chunks: Chunk[], intents: CandidateCategory[]): string {
+  const lines = [
+    'Verified candidate evidence for this question. Use ONLY these facts.',
+    'Projects are personal/independent work — not employment.',
+    intents.includes('contact')
+      ? `CONTACT\nEmail: ${profile.email}\nPhone: ${profile.phone}\nLinkedIn: ${profile.linkedin}\nGitHub: https://${profile.github}`
+      : '',
+  ]
+  for (const chunk of chunks) {
+    lines.push(
+      [
+        `${chunk.category.toUpperCase()} · ${chunk.title}${chunk.organization ? ` — ${chunk.organization}` : ''}`,
+        chunk.date ? `Dates: ${chunk.date}` : '',
+        chunk.excerpt,
+        chunk.technologies.length ? `Technologies: ${chunk.technologies.join(', ')}` : '',
+        chunk.metrics.length ? `Metrics: ${chunk.metrics.join(', ')}` : '',
+        `Source id: ${chunk.id}`,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    )
+  }
+  return lines.filter(Boolean).join('\n\n')
+}
+
+function buildStages(intents: CandidateCategory[], chunks: Chunk[]): RetrievalStage[] {
+  const wanted = [
+    { id: 'experience', label: 'Experience', match: (chunk: Chunk) => chunk.type === 'experience' },
+    { id: 'projects', label: 'Projects', match: (chunk: Chunk) => chunk.type === 'project' },
+    { id: 'skills', label: 'Skills', match: (chunk: Chunk) => chunk.type === 'skill' },
+    { id: 'education', label: 'Education', match: (chunk: Chunk) => chunk.type === 'education' },
+  ]
+  return wanted.map((stage) => ({
+    id: stage.id,
+    label: stage.label,
+    status: chunks.some(stage.match) || intents.includes(stage.id as CandidateCategory) ? 'done' : 'skipped',
+  }))
+}
 
 const AI_KEYWORDS =
   /\b(ai|artificial intelligence|machine learning|\bml\b|llm|gpt|rag|embedding|pinecone|gemini|openai|yolo|computer vision|vector|semantic search)\b/i
 const CYBER_KEYWORDS =
   /\b(cyber|security|sentinel|kql|palo alto|siem|syslog|cef|firewall|log analytics)\b/i
 const PROJECT_KEYWORDS =
-  /\b(project|built|build|created|developed|devdash|camera|saas|portfolio)\b/i
+  /\b(project|built|build|created|developed|devdash|camera|saas|portfolio|architecture)\b/i
+const PROJECT_NAME = /\b(devdash|security camera|camera investigator|cctv)\b/i
 const EXPERIENCE_KEYWORDS =
   /\b(experience|intern|internship|co-?op|work|role|job|career|software engineering|wellstar|shaw|upcancer|truespice|headstarter|lutheran)\b/i
 const SKILL_KEYWORDS =
@@ -30,265 +578,12 @@ const RESUME_KEYWORDS = /\b(resume|cv|download|pdf|document)\b/i
 const OVERVIEW_KEYWORDS =
   /\b(tell me about|overview|introduce|introduction|who is|60.second|summary)\b/i
 const CONTACT_KEYWORDS = /\b(contact|email|phone|linkedin|reach)\b/i
-
-export function analyzeQuery(query: string): CandidateCategory[] {
-  const categories = new Set<CandidateCategory>()
-
-  if (RESUME_KEYWORDS.test(query)) categories.add('resume')
-  if (CONTACT_KEYWORDS.test(query)) categories.add('profile')
-  if (AI_KEYWORDS.test(query)) categories.add('ai')
-  if (CYBER_KEYWORDS.test(query)) categories.add('cybersecurity')
-  if (PROJECT_KEYWORDS.test(query)) categories.add('projects')
-  if (
-    EXPERIENCE_KEYWORDS.test(query) &&
-    !AI_KEYWORDS.test(query) &&
-    !CYBER_KEYWORDS.test(query) &&
-    !PROJECT_KEYWORDS.test(query)
-  ) {
-    categories.add('experience')
-  }
-  if (SKILL_KEYWORDS.test(query) && !AI_KEYWORDS.test(query)) categories.add('skills')
-  if (EDUCATION_KEYWORDS.test(query)) categories.add('education')
-  if (ACTIVITY_KEYWORDS.test(query)) categories.add('activities')
-  if (STORY_KEYWORDS.test(query) || OVERVIEW_KEYWORDS.test(query)) {
-    categories.add('story')
-    categories.add('profile')
-  }
-
-  if (categories.size === 0) {
-    categories.add('profile')
-    categories.add('experience')
-    categories.add('skills')
-  }
-
-  return [...categories]
-}
-
-export function retrieveCandidateContext(query: string): {
-  categories: CandidateCategory[]
-  context: string
-  sources: Source[]
-} {
-  const categories = analyzeQuery(query)
-  const sections: string[] = []
-  const sources: Source[] = []
-  const seen = new Set<string>()
-
-  const addSource = (source: Source) => {
-    const key = `${source.type}:${source.title}:${source.organization ?? ''}`
-    if (seen.has(key)) return
-    seen.add(key)
-    sources.push(source)
-  }
-
-  const include = (category: CandidateCategory) => categories.includes(category)
-  const wantsOverview = include('profile') || include('resume')
-  const wantsAi = include('ai')
-  const wantsCyber = include('cybersecurity')
-
-  if (wantsOverview || include('education') || include('resume')) {
-    sections.push(formatEducation())
-    addSource({
-      type: 'education',
-      title: education.degree,
-      organization: education.school,
-      date: `Expected ${education.expectedGraduation}`,
-      relevantExcerpt: `Relevant coursework: ${education.coursework.join(', ')}.`,
-    })
-  }
-
-  if (wantsOverview) {
-    sections.push(
-      `PROFILE\nName: ${profile.name}\nTitle: ${profile.title}\nAvailability: ${profile.availability}\nEmail: ${profile.email}\nPhone: ${profile.phone}\nLinkedIn: ${profile.linkedin}`,
-    )
-  }
-
-  const relevantExperience = experience.filter((role) => {
-    if (include('experience') || include('resume') || wantsOverview) {
-      if (wantsAi && !wantsOverview && !include('experience')) {
-        return role.categories.includes('ai')
-      }
-      if (wantsCyber && !wantsOverview && !include('experience')) {
-        return role.categories.includes('cybersecurity')
-      }
-      return true
-    }
-    if (wantsAi) return role.categories.includes('ai')
-    if (wantsCyber) return role.categories.includes('cybersecurity')
-    return false
-  })
-
-  if (wantsAi && !include('experience') && !wantsOverview && !include('resume')) {
-    const aiRoles = experience.filter((role) => role.categories.includes('ai'))
-    for (const role of aiRoles) {
-      if (!relevantExperience.includes(role)) relevantExperience.push(role)
-    }
-  }
-
-  if (relevantExperience.length > 0) {
-    sections.push('PROFESSIONAL EXPERIENCE (jobs, internships, fellowships, co-ops — not projects)')
-    for (const role of relevantExperience) {
-      sections.push(formatExperience(role))
-      addSource({
-        type: 'experience',
-        title: role.role,
-        organization: role.organization,
-        date: formatDateRange(role.start, role.end),
-        technologies: [...role.technologies],
-        metrics: role.metrics.length > 0 ? [...role.metrics] : undefined,
-        relevantExcerpt: role.bullets.join(' '),
-      })
-    }
-  }
-
-  const relevantProjects = projects.filter((project) => {
-    if (include('projects') || include('resume') || wantsOverview) return true
-    if (wantsAi) return project.categories.includes('ai')
-    return false
-  })
-
-  if (wantsAi && !include('projects')) {
-    for (const project of projects.filter((item) => item.categories.includes('ai'))) {
-      if (!relevantProjects.includes(project)) relevantProjects.push(project)
-    }
-  }
-
-  if (relevantProjects.length > 0) {
-    sections.push('PROJECTS (personal/independent work — not professional employment)')
-    for (const project of relevantProjects) {
-      sections.push(formatProject(project))
-      addSource({
-        type: 'project',
-        title: project.title,
-        organization: project.subtitle,
-        date: formatDateRange(project.start, project.end),
-        technologies: [...project.technologies],
-        metrics: project.metrics.length > 0 ? [...project.metrics] : undefined,
-        relevantExcerpt: project.bullets.join(' '),
-      })
-    }
-  }
-
-  if (include('skills') || include('resume') || wantsAi || wantsOverview) {
-    sections.push(formatSkills(wantsAi))
-    addSource({
-      type: 'skill',
-      title: wantsAi ? 'AI and software skills' : 'Technical skills',
-      technologies: wantsAi
-        ? ['Python', 'PyTorch', 'TensorFlow', 'Pinecone', 'Gemini API', 'RAG']
-        : [...skills.languages.slice(0, 6), ...skills.frameworks.slice(0, 6)],
-      relevantExcerpt: wantsAi
-        ? 'AI-related skills from verified data: Python, PyTorch, TensorFlow, NumPy, plus RAG/Pinecone/Gemini API experience from Headstarter AI and project work.'
-        : `Languages: ${skills.languages.join(', ')}. Frameworks: ${skills.frameworks.join(', ')}.`,
-    })
-  }
-
-  if (include('activities') || include('resume') || wantsOverview) {
-    sections.push(
-      [
-        'ACTIVITIES',
-        `Organizations: ${activities.organizations.join(', ')}`,
-        `Hackathons: ${activities.hackathons.participations} participations, ${activities.hackathons.wins} wins.`,
-        `In Imani's words: ${activities.hackathons.note}`,
-      ].join('\n'),
-    )
-    addSource({
-      type: 'activity',
-      title: 'Student organizations and hackathons',
-      metrics: [
-        `${activities.hackathons.wins} hackathon wins`,
-        `${activities.hackathons.participations} hackathon participations`,
-      ],
-      relevantExcerpt: `Member of ${activities.organizations.join(', ')}.`,
-    })
-  }
-
-  sections.push(
-    [
-      'HOW IMANI TALKS',
-      'Speak about Imani in the third person using he/him. Start answers with "Imani is" or "Imani Gad is". Never start with "I". Use the personal story below whenever origin, motivation, teaching, or "who is he" is relevant.',
-    ].join('\n'),
-  )
-
-  if (include('story') || wantsOverview) {
-    sections.push(
-      [
-        'PERSONAL STORY (third person — Imani is a man; use he/him)',
-        story.inHisWords,
-        '',
-        `Languages at home: ${story.languagesAtHome.join(', ')}`,
-        `Outside of software: ${story.hobbies.join('; ')}.`,
-        `How he works: ${story.team}`,
-        `What he is tired of people assuming: ${story.assumption}`,
-      ].join('\n'),
-    )
-    addSource({
-      type: 'story',
-      title: 'Personal background',
-      date: `Moved to the United States in ${story.movedToUnitedStates}`,
-      relevantExcerpt: story.summary,
-    })
-  }
-
-  return {
-    categories,
-    context: sections.join('\n\n'),
-    sources,
-  }
-}
-
-function formatEducation(): string {
-  return [
-    'EDUCATION',
-    `${education.degree}, ${education.school}`,
-    `Expected graduation: ${education.expectedGraduation}`,
-    `Relevant coursework: ${education.coursework.join(', ')}`,
-  ].join('\n')
-}
-
-function formatExperience(role: (typeof experience)[number]): string {
-  return [
-    `${role.role} — ${role.organization} (${formatDateRange(role.start, role.end)})`,
-    role.why ? `Why he took this: ${role.why}` : '',
-    role.memory ? `A moment he still remembers: ${role.memory}` : '',
-    ...role.bullets.map((bullet) => `- ${bullet}`),
-    `Technologies: ${role.technologies.join(', ')}`,
-    role.metrics.length > 0 ? `Metrics: ${role.metrics.join(', ')}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n')
-}
-
-function formatProject(project: (typeof projects)[number]): string {
-  return [
-    `${project.title} — ${project.subtitle} (${formatDateRange(project.start, project.end)})`,
-    ...project.bullets.map((bullet) => `- ${bullet}`),
-    `Technologies: ${project.technologies.join(', ')}`,
-    project.metrics.length > 0 ? `Metrics: ${project.metrics.join(', ')}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n')
-}
-
-function formatSkills(aiFocused: boolean): string {
-  if (aiFocused) {
-    return [
-      'TECHNICAL SKILLS (AI-relevant subset plus core languages)',
-      `Languages: ${skills.languages.join(', ')}`,
-      `AI/ML libraries: PyTorch, NumPy, TensorFlow`,
-      'Do not claim PyTorch or TensorFlow were used in a specific job unless that job lists them.',
-    ].join('\n')
-  }
-
-  return [
-    'TECHNICAL SKILLS',
-    `Languages: ${skills.languages.join(', ')}`,
-    `Frameworks/Libraries: ${skills.frameworks.join(', ')}`,
-    `Tools: ${skills.tools.join(', ')}`,
-    `Project management: ${skills.projectManagement.join(', ')}`,
-    `Operating systems: ${skills.operatingSystems.join(', ')}`,
-  ].join('\n')
-}
+const BACKEND_KEYWORDS =
+  /\b(backend|back-end|api|apis|server|postgres|postgresql|redis|node\.?js|fastapi|microservice|database)\b/i
+const FRONTEND_KEYWORDS =
+  /\b(frontend|front-end|react|css|html|ui|accessibility|responsive)\b/i
+const WHY_HIRE_KEYWORDS =
+  /\b(why (should i )?(interview|hire)|what makes (him|imani).*(different|unique)|stand out|why interview)\b/i
 
 export function isResumeQuery(query: string): boolean {
   return RESUME_KEYWORDS.test(query)
@@ -299,3 +594,22 @@ export function isEvidenceQuery(query: string): boolean {
     query,
   )
 }
+
+export function isWhyHireQuery(query: string): boolean {
+  return WHY_HIRE_KEYWORDS.test(query)
+}
+
+export function isContactQuery(query: string): boolean {
+  return CONTACT_KEYWORDS.test(query)
+}
+
+export function getSourceById(id: string): Source | undefined {
+  const chunk = CHUNKS.find((item) => item.id === id)
+  return chunk ? toSource(chunk) : undefined
+}
+
+export function allSources(): Source[] {
+  return CHUNKS.map(toSource)
+}
+
+export { TECH_INVENTORY, normalizeTech }

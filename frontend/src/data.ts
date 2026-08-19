@@ -32,6 +32,16 @@ export type CannedResponse = {
   sections: MessageSection[]
   evidence: EvidenceItem[]
   isResume?: boolean
+  sources?: import('./services/api').Source[]
+  verified?: boolean
+  verificationNote?: string
+  followUps?: string[]
+  retrievalStages?: import('./services/api').RetrievalStage[]
+  recruiterSummary?: import('./services/api').RecruiterSummary
+  projectDeepDive?: import('./services/api').ProjectDeepDive
+  differentiators?: import('./services/api').DifferentiatorGroup[]
+  showContactCta?: boolean
+  session?: import('./services/api').RecruiterSession
 }
 
 const EVIDENCE = {
@@ -366,10 +376,11 @@ export const RECRUITER_CHIPS = [
 ]
 
 export const THINKING_LABELS = [
-  'SEARCHING EXPERIENCE',
+  'SEARCHING CANDIDATE PROFILE',
+  'MATCHING EXPERIENCE',
   'MATCHING PROJECTS',
-  'VERIFYING IMPACT',
-  'FORMULATING RESPONSE',
+  'VERIFYING SKILLS',
+  'GENERATING GROUNDED RESPONSE',
 ]
 
 export const CONTEXT_DATA = {

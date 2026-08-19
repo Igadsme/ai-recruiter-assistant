@@ -43,7 +43,7 @@ export function createApp() {
       methods: ['GET', 'POST', 'OPTIONS'],
     }),
   )
-  app.use(express.json({ limit: '8kb' }))
+  app.use(express.json({ limit: '32kb' }))
 
   app.use('/api', apiRouter)
 

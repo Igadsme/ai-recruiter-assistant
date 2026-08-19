@@ -19,7 +19,7 @@ describe('App chat', () => {
     mockedSendChat.mockReset()
   })
 
-  it('submits a question, shows thinking, then renders a spoken response without evidence', async () => {
+  it('submits a question, shows thinking, then renders a spoken response with sources', async () => {
     const user = userEvent.setup()
     let resolveChat: (value: Awaited<ReturnType<typeof sendChat>>) => void = () => undefined
     mockedSendChat.mockImplementation(
@@ -63,9 +63,11 @@ describe('App chat', () => {
     await waitFor(() => {
       expect(screen.getByText(/born in Rwanda/)).toBeInTheDocument()
     }, { timeout: 4000 })
-    expect(screen.queryByText('EVIDENCE')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('SOURCES')).toBeInTheDocument()
+      expect(screen.getByText(/UpCancer/)).toBeInTheDocument()
+    }, { timeout: 4000 })
     expect(screen.queryByText('SOFTWARE ENGINEERING')).not.toBeInTheDocument()
-    expect(screen.queryByText('UpCancer')).not.toBeInTheDocument()
     expect(mockedSendChat).toHaveBeenCalledWith(
       expect.objectContaining({
         message: 'Tell me about Imani Gad',

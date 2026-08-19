@@ -1,7 +1,19 @@
 import { education, experience, skills } from '../data/candidate/index.ts'
-import { isEvidenceQuery, isResumeQuery, retrieveCandidateContext } from './retrieval.ts'
+import {
+  isContactQuery,
+  isResumeQuery,
+  isWhyHireQuery,
+  retrieveCandidateContext,
+} from './retrieval.ts'
 import { getLlmClient, parseStructuredResponse } from './gemini.ts'
-import { appendMessage, getOrCreateConversation } from './conversation.ts'
+import { appendMessage, getOrCreateConversation, patchSession, recordRetrievalOnSession } from './conversation.ts'
+import { trackEvent } from './analytics.ts'
+import {
+  buildDifferentiatorGroups,
+  buildFollowUps,
+  buildRecruiterSummary,
+  toProjectDeepDive,
+} from './recruiter.ts'
 import { AppError, type ChatMode, type ChatResponse, type MessageSection } from '../types.ts'
 
 export async function handleChat(input: {
@@ -11,9 +23,13 @@ export async function handleChat(input: {
 }): Promise<ChatResponse> {
   const conversation = getOrCreateConversation(input.conversationId)
   const retrieval = retrieveCandidateContext(input.message)
+  const session = recordRetrievalOnSession(conversation.id, retrieval.sources, input.message)
+  trackEvent({ type: 'question_asked', query: input.message, conversationId: conversation.id })
 
   if (isResumeQuery(input.message)) {
-    const response = buildResumeResponse(conversation.id)
+    const updated = patchSession(conversation.id, { resumeViewed: true })
+    trackEvent({ type: 'resume_viewed', conversationId: conversation.id })
+    const response = buildResumeResponse(conversation.id, updated)
     persistTurn(conversation.id, input.message, response.message)
     return response
   }
@@ -25,26 +41,45 @@ export async function handleChat(input: {
       mode: input.mode,
       context: retrieval.context,
       history: conversation.messages,
+      verified: retrieval.verified,
+      verificationNote: retrieval.verificationNote,
     })
   } catch (error) {
     if (error instanceof AppError) throw error
     throw new AppError(503, 'The assistant is temporarily unavailable.', 'gemini_unavailable')
   }
 
-  const showEvidence = isEvidenceQuery(input.message)
   const isResume = generated.isResume || generated.intro.trim().toUpperCase().startsWith('RESUME')
   const spoken = enforceThirdPerson(
-    flattenChatMessage(isResume
-      ? generated.intro.replace(/^RESUME\s*/i, '').trim() || generated.intro
-      : generated.intro),
+    flattenChatMessage(
+      isResume
+        ? generated.intro.replace(/^RESUME\s*/i, '').trim() || generated.intro
+        : generated.intro,
+    ),
   )
+
+  const whyHire = isWhyHireQuery(input.message)
+  const projectDeepDive =
+    retrieval.projectId && (whyHire ? undefined : toProjectDeepDive(retrieval.projectId))
+  if (projectDeepDive) {
+    trackEvent({ type: 'project_viewed', query: projectDeepDive.title, conversationId: conversation.id })
+  }
 
   const response: ChatResponse = {
     message: spoken,
     sections: isResume ? generated.sections : [],
-    sources: showEvidence ? retrieval.sources : [],
+    sources: retrieval.sources.slice(0, 8),
     conversationId: conversation.id,
     isResume,
+    verified: retrieval.verified,
+    verificationNote: retrieval.verificationNote,
+    followUps: buildFollowUps(input.message, retrieval.sources),
+    retrievalStages: retrieval.stages,
+    recruiterSummary: input.mode === 'recruiter' ? buildRecruiterSummary(retrieval.sources) : undefined,
+    projectDeepDive,
+    differentiators: whyHire ? buildDifferentiatorGroups() : undefined,
+    showContactCta: isContactQuery(input.message) || session.questionsAsked >= 3,
+    session,
   }
 
   persistTurn(conversation.id, input.message, spoken)
@@ -94,7 +129,10 @@ function rewriteOpening(text: string): string {
   return text
 }
 
-function buildResumeResponse(conversationId: string): ChatResponse {
+function buildResumeResponse(
+  conversationId: string,
+  session: ChatResponse['session'],
+): ChatResponse {
   const sections: MessageSection[] = [
     {
       label: 'EDUCATION',
@@ -130,5 +168,20 @@ function buildResumeResponse(conversationId: string): ChatResponse {
     sources: [],
     conversationId,
     isResume: true,
+    verified: true,
+    followUps: [
+      'Why should I interview Imani Gad?',
+      'Tell me about DevDash',
+      'What backend experience does he have?',
+      'What AI experience does Imani have?',
+    ],
+    retrievalStages: [
+      { id: 'experience', label: 'Experience', status: 'done' },
+      { id: 'projects', label: 'Projects', status: 'done' },
+      { id: 'skills', label: 'Skills', status: 'done' },
+      { id: 'education', label: 'Education', status: 'done' },
+    ],
+    showContactCta: true,
+    session: { ...session, resumeViewed: true },
   }
 }

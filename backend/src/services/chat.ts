@@ -60,7 +60,7 @@ export async function handleChat(input: {
 
   const whyHire = isWhyHireQuery(input.message)
   const projectDeepDive =
-    retrieval.projectId && (whyHire ? undefined : toProjectDeepDive(retrieval.projectId))
+    !whyHire && retrieval.projectId ? toProjectDeepDive(retrieval.projectId) : undefined
   if (projectDeepDive) {
     trackEvent({ type: 'project_viewed', query: projectDeepDive.title, conversationId: conversation.id })
   }

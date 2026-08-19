@@ -5,7 +5,7 @@ import {
   projects,
   recruiterBrief,
 } from '../data/candidate/index.ts'
-import type { DifferentiatorGroup, RecruiterSummary, Source, StrengthLevel } from '../types.ts'
+import type { DifferentiatorGroup, ProjectDeepDive, RecruiterSummary, Source, StrengthLevel } from '../types.ts'
 
 export function buildFollowUps(query: string, sources: Source[]): string[] {
   const options: string[] = []
@@ -100,7 +100,7 @@ export function buildDifferentiatorGroups(): DifferentiatorGroup[] {
   ]
 }
 
-export function toProjectDeepDive(projectId: string) {
+export function toProjectDeepDive(projectId: string): ProjectDeepDive | undefined {
   const project = projects.find((item) => item.id === projectId)
   if (!project) return undefined
   return {

@@ -91,6 +91,40 @@ describe('POST /api/chat', () => {
     expect(mockLlm.generate).toHaveBeenCalledTimes(1)
   })
 
+  it('answers a greeting without retrieval or Gemini', async () => {
+    const response = await request(app).post('/api/chat').send({ message: 'hi' })
+
+    expect(response.status).toBe(200)
+    expect(response.body.message).toBe("Hey! I'm Imani's AI assistant. What would you like to know about him?")
+    expect(response.body.sources).toEqual([])
+    expect(response.body.retrievalStages).toEqual([])
+    expect(response.body.conversational).toBe(true)
+    expect(response.body.revealSources).toBe(false)
+    expect(response.body.intent).toBe('greeting')
+    expect(mockLlm.generate).not.toHaveBeenCalled()
+  })
+
+  it('gives a short introduction for who-is questions', async () => {
+    const response = await request(app).post('/api/chat').send({ message: 'Who is Imani?' })
+
+    expect(response.status).toBe(200)
+    expect(response.body.intent).toBe('introduction')
+    expect(response.body.conversational).toBe(true)
+    expect(response.body.sources).toEqual([])
+    expect(response.body.message).toMatch(/Kennesaw State University/)
+    expect(mockLlm.generate).not.toHaveBeenCalled()
+  })
+
+  it('reveals sources when asked for proof', async () => {
+    const response = await request(app).post('/api/chat').send({ message: 'Show me proof' })
+
+    expect(response.status).toBe(200)
+    expect(response.body.intent).toBe('proof')
+    expect(response.body.revealSources).toBe(true)
+    expect(response.body.sources.length).toBeGreaterThan(0)
+    expect(mockLlm.generate).not.toHaveBeenCalled()
+  })
+
   it('rewrites first-person model replies into third person', async () => {
     setLlmClientForTests({
       generate: async () => ({
@@ -99,7 +133,7 @@ describe('POST /api/chat', () => {
       }),
     })
 
-    const response = await request(app).post('/api/chat').send({ message: 'Tell me about Imani Gad' })
+    const response = await request(app).post('/api/chat').send({ message: 'What did he do at UpCancer?' })
     expect(response.status).toBe(200)
     expect(response.body.message).toBe('Imani was born in Rwanda and he built services at UpCancer.')
   })
@@ -138,7 +172,7 @@ describe('POST /api/chat', () => {
       },
     })
 
-    const response = await request(app).post('/api/chat').send({ message: 'Tell me about Imani Gad' })
+    const response = await request(app).post('/api/chat').send({ message: 'What AI experience does Imani Gad have?' })
     expect(response.status).toBe(503)
     expect(response.body.error.code).toBe('gemini_unavailable')
     expect(JSON.stringify(response.body)).not.toContain('API key leaked')

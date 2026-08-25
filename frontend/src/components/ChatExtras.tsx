@@ -1,4 +1,8 @@
 import type { CSSProperties } from 'react'
+import { useState } from 'react'
+import type { RecruiterSummary, RetrievalStage, Source } from '../services/api'
+import { RecruiterSummaryCard } from './RecruiterCards'
+import { SourcesList } from './SourcesList'
 import { MonoLabel } from './ui'
 
 export function FollowUps({
@@ -111,6 +115,59 @@ export function RetrievalActivity({ stages }: { stages: Array<{ id: string; labe
           </span>
         ))}
       </div>
+    </div>
+  )
+}
+
+export function SourcesDisclosure({
+  sources,
+  stages,
+  recruiterSummary,
+  verified,
+  verificationNote,
+  defaultOpen = false,
+}: {
+  sources: Source[]
+  stages?: RetrievalStage[]
+  recruiterSummary?: RecruiterSummary
+  verified?: boolean
+  verificationNote?: string
+  defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  const hasChrome =
+    sources.length > 0 || (stages && stages.length > 0) || Boolean(recruiterSummary) || Boolean(verificationNote)
+  if (!hasChrome) return null
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        aria-label={open ? 'Hide sources' : 'View sources'}
+        style={{
+          fontFamily: "'DM Mono', monospace",
+          fontSize: 10,
+          letterSpacing: '0.12em',
+          color: open ? 'rgba(110,168,255,0.88)' : 'rgba(255,255,255,0.42)',
+          background: open ? 'rgba(110,168,255,0.10)' : 'rgba(255,255,255,0.04)',
+          border: `1px solid ${open ? 'rgba(110,168,255,0.28)' : 'rgba(255,255,255,0.10)'}`,
+          borderRadius: 8,
+          padding: '6px 12px',
+          cursor: 'pointer',
+        }}
+      >
+        {open ? 'HIDE SOURCES' : 'VIEW SOURCES'}
+      </button>
+      {open && (
+        <div className="animate-fade-in" style={{ marginTop: 12 }}>
+          <VerifiedBadge verified={verified !== false} note={verificationNote} />
+          {stages && stages.length > 0 && <RetrievalActivity stages={stages} />}
+          {recruiterSummary && <RecruiterSummaryCard summary={recruiterSummary} />}
+          {sources.length > 0 && <SourcesList sources={sources} />}
+        </div>
+      )}
     </div>
   )
 }

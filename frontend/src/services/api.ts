@@ -86,6 +86,9 @@ export type ChatApiResponse = {
   differentiators?: DifferentiatorGroup[]
   showContactCta?: boolean
   session?: RecruiterSession
+  intent?: string
+  conversational?: boolean
+  revealSources?: boolean
 }
 
 export type RecruiterBrief = {

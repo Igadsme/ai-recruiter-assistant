@@ -574,7 +574,7 @@ const ACTIVITY_KEYWORDS =
   /\b(hackathon|ieee|shpe|colorstack|club|activit|community|leadership|mentor)\b/i
 const STORY_KEYWORDS =
   /\b(story|background|born|rwanda|congo|congolese|immigrant|moved|personal|who is|about|life|grew up|childhood|family|journey|motivation|why did|how did you|get into|personality|who are you|swahili|kinyarwanda|hobby|hobbies|gym|soccer|music|driving)\b/i
-const RESUME_KEYWORDS = /\b(resume|cv|download|pdf|document)\b/i
+const RESUME_KEYWORDS = /\b(r[eé]sum[eé]|cv|download|pdf|document)\b/i
 const OVERVIEW_KEYWORDS =
   /\b(tell me about|overview|introduce|introduction|who is|60.second|summary)\b/i
 const CONTACT_KEYWORDS = /\b(contact|email|phone|linkedin|reach)\b/i
@@ -583,7 +583,7 @@ const BACKEND_KEYWORDS =
 const FRONTEND_KEYWORDS =
   /\b(frontend|front-end|react|css|html|ui|accessibility|responsive)\b/i
 const WHY_HIRE_KEYWORDS =
-  /\b(why (should i )?(interview|hire)|what makes (him|imani).*(different|unique)|stand out|why interview)\b/i
+  /\b(why (should (i|we) |would (i|we|you) )?(interview|hire)|what makes (him|imani).*(different|unique)|stand out|why interview|why hire him)\b/i
 
 export function isResumeQuery(query: string): boolean {
   return RESUME_KEYWORDS.test(query)

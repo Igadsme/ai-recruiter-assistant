@@ -42,6 +42,8 @@ export type CannedResponse = {
   differentiators?: import('./services/api').DifferentiatorGroup[]
   showContactCta?: boolean
   session?: import('./services/api').RecruiterSession
+  conversational?: boolean
+  revealSources?: boolean
 }
 
 const EVIDENCE = {
@@ -382,6 +384,30 @@ export const THINKING_LABELS = [
   'VERIFYING SKILLS',
   'GENERATING GROUNDED RESPONSE',
 ]
+
+const CASUAL_MESSAGE =
+  /^(hi|hii+|hey+|hello+|howdy|yo|hiya|sup|what'?s up|whats up|good (morning|afternoon|evening)|greetings|hey there|hi there|hello there|how are you( doing)?|how'?s it going|how are things|thanks|thank you|thx|who are you)$/i
+
+export function isCasualMessage(query: string): boolean {
+  const text = query
+    .toLowerCase()
+    .replace(/[éè]/g, 'e')
+    .replace(/[^a-z0-9'\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return CASUAL_MESSAGE.test(text)
+}
+
+export function skipsThinkingState(query: string): boolean {
+  if (isCasualMessage(query)) return true
+  const text = query
+    .toLowerCase()
+    .replace(/[éè]/g, 'e')
+    .replace(/[^a-z0-9'\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return /^(who is (imani|gad|he)( gad)?|tell me about (imani|him)( gad)?|thanks|thank you)$/.test(text)
+}
 
 export const CONTEXT_DATA = {
   experience: [

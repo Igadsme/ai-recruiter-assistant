@@ -1,5 +1,17 @@
 export type ChatMode = 'general' | 'recruiter'
 
+export type ConversationIntent =
+  | 'greeting'
+  | 'small_talk'
+  | 'thanks'
+  | 'assistant'
+  | 'introduction'
+  | 'why_hire'
+  | 'proof'
+  | 'resume'
+  | 'contact'
+  | 'candidate'
+
 export type SourceType =
   | 'experience'
   | 'education'
@@ -115,6 +127,9 @@ export type ChatResponse = {
   differentiators?: DifferentiatorGroup[]
   showContactCta: boolean
   session: RecruiterSession
+  intent: ConversationIntent
+  conversational: boolean
+  revealSources: boolean
 }
 
 export type CandidateCategory =

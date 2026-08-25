@@ -64,16 +64,41 @@ describe('App chat', () => {
       expect(screen.getByText(/born in Rwanda/)).toBeInTheDocument()
     }, { timeout: 4000 })
     await waitFor(() => {
-      expect(screen.getByText('SOURCES')).toBeInTheDocument()
-      expect(screen.getByText(/UpCancer/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /view sources/i })).toBeInTheDocument()
     }, { timeout: 4000 })
+    expect(screen.queryByText('SOURCES')).not.toBeInTheDocument()
     expect(screen.queryByText('SOFTWARE ENGINEERING')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /view sources/i }))
+    expect(screen.getByText('SOURCES')).toBeInTheDocument()
+    expect(screen.getByText(/UpCancer/)).toBeInTheDocument()
     expect(mockedSendChat).toHaveBeenCalledWith(
       expect.objectContaining({
         message: 'Tell me about Imani Gad',
         mode: 'general',
       }),
     )
+  })
+
+  it('renders a greeting without retrieval chrome', async () => {
+    const user = userEvent.setup()
+    mockedSendChat.mockResolvedValue({
+      message: "Hey! I'm Imani's AI assistant. What would you like to know about him?",
+      sections: [],
+      sources: [],
+      conversationId: '11111111-1111-4111-8111-111111111111',
+      conversational: true,
+      revealSources: false,
+      intent: 'greeting',
+    })
+
+    render(<App />)
+    await user.type(screen.getByLabelText('Ask about Imani Gad'), 'hi')
+    await user.keyboard('{Enter}')
+
+    expect(screen.queryByText('THINKING')).not.toBeInTheDocument()
+    expect(await screen.findByText(/Imani's AI assistant/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /view sources/i })).not.toBeInTheDocument()
+    expect(screen.queryByText('RETRIEVAL')).not.toBeInTheDocument()
   })
 
   it('sends recruiter mode to the API', async () => {

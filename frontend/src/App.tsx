@@ -11,6 +11,7 @@ import {
   THINKING_LABELS,
   CONTEXT_DATA,
   CANDIDATE,
+  skipsThinkingState,
   type CannedResponse,
   type EvidenceItem,
 } from './data'
@@ -18,15 +19,14 @@ import { getErrorMessage, sendChat, trackEvent, type ChatApiResponse, type ChatM
 import { useSpeechRecognition } from './hooks/useSpeechRecognition'
 import { useSpeechSynthesis } from './hooks/useSpeechSynthesis'
 import { RecruiterBriefCard } from './components/RecruiterBrief'
-import { SourcesList } from './components/SourcesList'
 import { ProjectDeepDiveCard } from './components/ProjectDeepDiveCard'
 import { FitPanel } from './components/FitPanel'
 import { InterviewPanel } from './components/InterviewPanel'
 import { CareerTimeline } from './components/CareerTimeline'
 import { RecruiterSessionPanel } from './components/RecruiterSessionPanel'
 import { AnalyticsDashboard } from './components/AnalyticsDashboard'
-import { ContactCta, FollowUps, RetrievalActivity, VerifiedBadge } from './components/ChatExtras'
-import { DifferentiatorsCard, RecruiterSummaryCard } from './components/RecruiterCards'
+import { ContactCta, FollowUps, SourcesDisclosure } from './components/ChatExtras'
+import { DifferentiatorsCard } from './components/RecruiterCards'
 import { HeaderChip } from './components/ui'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -55,8 +55,10 @@ function toCannedResponse(result: ChatApiResponse, _query: string): CannedRespon
       metrics: source.metrics,
     }))
 
+  const conversational = Boolean(result.conversational)
+
   return {
-    intro: spokenText(result.message),
+    intro: spokenText(result.message, { rewritePerson: !conversational }),
     sections: result.isResume ? result.sections ?? [] : [],
     evidence,
     isResume: result.isResume,
@@ -70,18 +72,22 @@ function toCannedResponse(result: ChatApiResponse, _query: string): CannedRespon
     differentiators: result.differentiators,
     showContactCta: result.showContactCta,
     session: result.session,
+    conversational,
+    revealSources: Boolean(result.revealSources),
   }
 }
 
-function spokenText(raw: string): string {
+function spokenText(raw: string, options?: { rewritePerson?: boolean }): string {
+  const rewritePerson = options?.rewritePerson !== false
   const trimmed = raw.trim()
-  if (!trimmed.startsWith('{')) return toThirdPersonReply(trimmed)
+  if (!trimmed.startsWith('{')) return rewritePerson ? toThirdPersonReply(trimmed) : trimmed
   try {
     const parsed = JSON.parse(trimmed) as Record<string, unknown>
     for (const key of ['intro', 'Intro', 'message', 'Message']) {
       const value = parsed[key]
       if (typeof value === 'string' && value.trim() && !value.trim().startsWith('{')) {
-        return toThirdPersonReply(value.trim())
+        const spoken = value.trim()
+        return rewritePerson ? toThirdPersonReply(spoken) : spoken
       }
     }
     if (Array.isArray(parsed.sections)) {
@@ -95,13 +101,16 @@ function spokenText(raw: string): string {
         .join('\n\n')
     }
   } catch {
-    return toThirdPersonReply(trimmed)
+    return rewritePerson ? toThirdPersonReply(trimmed) : trimmed
   }
-  return toThirdPersonReply(trimmed)
+  return rewritePerson ? toThirdPersonReply(trimmed) : trimmed
 }
 
 function toThirdPersonReply(text: string): string {
   let out = text.trim()
+  if (/\bI['’]m Imani['’]s AI assistant\b/i.test(out) || /\bI am Imani['’]s AI assistant\b/i.test(out)) {
+    return out
+  }
   if (/^I['’]m\b/i.test(out)) out = out.replace(/^I['’]m\b/i, 'Imani is')
   else if (/^I am\b/i.test(out)) out = out.replace(/^I am\b/i, 'Imani is')
   else if (/^I['’]ve\b/i.test(out)) out = out.replace(/^I['’]ve\b/i, 'Imani has')
@@ -121,6 +130,14 @@ function toThirdPersonReply(text: string): string {
     .replace(/\bmyself\b/g, 'himself')
     .replace(/\b[Mm]y\b/g, 'his')
     .replace(/\bmine\b/g, 'his')
+}
+
+function VerifiedBadgeNote({ note }: { note: string }) {
+  return (
+    <p style={{ fontSize: 12.5, color: 'rgba(248,196,100,0.75)', marginBottom: 10, lineHeight: 1.5 }}>
+      {note}
+    </p>
+  )
 }
 
 function WorkInProgressFooter({
@@ -888,7 +905,9 @@ function AssistantMessage({
       className="animate-fade-up"
       style={{ width: '100%', maxWidth: 680 }}
     >
-      {r && <VerifiedBadge verified={r.verified !== false} note={r.verificationNote} />}
+      {r && !r.conversational && r.verificationNote && (
+        <VerifiedBadgeNote note={r.verificationNote} />
+      )}
       <p
         className={streaming ? 'streaming-cursor' : ''}
         style={{
@@ -948,18 +967,23 @@ function AssistantMessage({
 
       {r && evidenceVisible && (
         <>
-          {r.retrievalStages && r.retrievalStages.length > 0 && (
-            <RetrievalActivity stages={r.retrievalStages} />
-          )}
-          {r.recruiterSummary && <RecruiterSummaryCard summary={r.recruiterSummary} />}
           {r.differentiators && <DifferentiatorsCard groups={r.differentiators} />}
           {r.projectDeepDive && <ProjectDeepDiveCard project={r.projectDeepDive} />}
-          {sources.length > 0 && <SourcesList sources={sources} />}
+          {!r.conversational && (
+            <SourcesDisclosure
+              sources={sources}
+              stages={r.retrievalStages}
+              recruiterSummary={r.recruiterSummary}
+              verified={r.verified}
+              verificationNote={r.verificationNote}
+              defaultOpen={Boolean(r.revealSources)}
+            />
+          )}
         </>
       )}
 
       {/* Evidence */}
-      {evidence.length > 0 && evidenceVisible && sources.length === 0 && (
+      {evidence.length > 0 && evidenceVisible && sources.length === 0 && !r?.conversational && (
         <div className="animate-fade-in" style={{ marginTop: 20 }}>
           <div
             className="flex items-center gap-3"
@@ -1645,7 +1669,8 @@ function AssistantShell() {
       setLastQuery(trimmed)
       const userMsg: Message = { id: crypto.randomUUID(), role: 'user', text: trimmed }
       setMessages((prev) => [...prev, userMsg])
-      setAppState('thinking')
+      const casual = skipsThinkingState(trimmed)
+      setAppState(casual ? 'conversation' : 'thinking')
 
       try {
         const result = await sendChat({

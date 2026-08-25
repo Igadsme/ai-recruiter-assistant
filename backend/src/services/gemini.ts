@@ -16,6 +16,7 @@ export type GenerateChatInput = {
   history: ConversationMessage[]
   verified?: boolean
   verificationNote?: string
+  intent?: string
 }
 
 export type LlmClient = {
@@ -178,16 +179,22 @@ function isRetryableGeminiError(error: unknown): boolean {
 
 function buildUserTurn(input: GenerateChatInput): string {
   const followUp = input.history.length > 0
+  const whyHire = input.intent === 'why_hire'
   return [
     `Mode: ${input.mode}`,
+    input.intent ? `Conversation intent: ${input.intent}` : '',
     `Verification: ${input.verified === false ? 'NOT VERIFIED' : 'VERIFIED'}`,
     input.verificationNote ? `Verification note: ${input.verificationNote}` : '',
     '',
     followUp
-      ? 'This is a follow-up. Stay in third person (he/him). Do not restart the biography. Do not force the sentence to begin with "Imani is" unless that is the natural answer. Answer the question directly and name the evidence.'
-      : 'Write about Imani in the third person. Start the first answer with "Imani is" or "Imani Gad is". Never start with "I". Use he/him.',
-    '',
-    'Name specific roles and projects from the context. If the fact is not in the context, say it is not verified.',
+      ? 'This is a follow-up. Use the previous conversation naturally. Do not restart his biography. Do not begin with "Imani Gad is" unless that is the most natural answer.'
+      : 'Answer the question they asked. Do not deliver a résumé summary unless they asked who he is, why to hire him, or for his résumé.',
+    whyHire
+      ? 'They asked why to hire or interview him. Give a structured, evidence-first pitch in a few short paragraphs — still conversational, not a dump of resume bullets.'
+      : 'Keep it to one or two natural sentences first. Add a little more only if the question needs it.',
+    'When talking about Imani, use he/him. You may say "I\'m Imani\'s AI assistant" only if they asked who you are.',
+    'If a fact is not in the context, say: "I don\'t have that information, but you can ask Imani directly."',
+    'Name specific roles and projects from the context when you make a claim.',
     input.mode === 'recruiter'
       ? 'Recruiter mode: tighter, evidence-first, no filler. Recruiters already have the brief — do not repeat his full life story unless asked.'
       : '',

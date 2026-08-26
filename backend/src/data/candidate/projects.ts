@@ -34,6 +34,7 @@ export type ProjectEntry = {
   challenges: string[]
   impact: string[]
   github?: string
+  website?: string
 }
 
 export const projects: ProjectEntry[] = [
@@ -44,10 +45,8 @@ export const projects: ProjectEntry[] = [
     start: 'April 2026',
     end: 'May 2026',
     bullets: [
-      'Built a full-stack SaaS application using Next.js and Prisma.',
-      'Integrated GitHub APIs to ingest 1,000+ commits, pull requests, and CI/CD events.',
-      'Implemented LLM summarization and task prioritization using the OpenAI API.',
-      'Reduced manual reporting time by 80%.',
+      'Built a full-stack developer productivity SaaS with Next.js and Prisma, integrating GitHub APIs to process 1,000+ commits, PRs, and CI/CD events.',
+      'Developed LLM summarization and task prioritization via the OpenAI API, reducing manual reporting time by 80%.',
     ],
     technologies: ['Next.js', 'Prisma', 'GitHub API', 'OpenAI API', 'TypeScript'],
     metrics: ['1,000+ commits ingested', '-80% reporting time'],
@@ -81,6 +80,7 @@ export const projects: ProjectEntry[] = [
     ],
     impact: ['Ingested 1,000+ GitHub events', 'Reduced manual reporting time by 80%'],
     github: 'https://github.com/Igadsme',
+    website: 'https://devdash.com',
   },
   {
     id: 'securitycam',
@@ -89,8 +89,8 @@ export const projects: ProjectEntry[] = [
     start: 'June 2026',
     end: 'July 2026',
     bullets: [
-      'Built an object detection system using FastAPI and YOLOv8 with a Next.js frontend.',
-      'Implemented embedding-based search over CCTV metadata for ranked, timestamped query results.',
+      'Engineered a computer-vision pipeline with YOLOv8 and FastAPI to detect and track subjects across CCTV footage.',
+      'Built embedding-based semantic search over CCTV metadata, returning ranked results with timestamped detections.',
     ],
     technologies: ['FastAPI', 'YOLOv8', 'Next.js', 'Embeddings', 'Python'],
     metrics: [],
@@ -114,8 +114,8 @@ export const projects: ProjectEntry[] = [
       ],
     },
     contributed: [
-      'Built the object detection system with FastAPI and YOLOv8 and the Next.js frontend.',
-      'Implemented embedding-based search over CCTV metadata for ranked, timestamped query results.',
+      'Engineered the computer-vision pipeline with FastAPI and YOLOv8, including the Next.js frontend.',
+      'Built embedding-based semantic search over CCTV metadata for ranked, timestamped detections.',
     ],
     challenges: [
       'Running object detection and exposing it through an API that a frontend can query.',

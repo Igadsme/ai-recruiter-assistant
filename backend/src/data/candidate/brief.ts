@@ -21,6 +21,8 @@ export const recruiterBrief = {
     'PostgreSQL',
     'AWS',
     'Docker',
+    'FastAPI',
+    'Redis',
   ],
   relevantExperienceCount: experience.filter((role) => role.organization !== 'Lutheran Service School').length,
   relevantExperienceLabel: 'internships, a fellowship, and a co-op',

@@ -14,7 +14,7 @@ export const story = {
     'learning about AI, startups, and technology beyond the classroom',
   ],
   summary:
-    'Gad was born in Rwanda, grew up in a Congolese household speaking Swahili, Kinyarwanda, and English, and moved to the United States with his family in 2018. He began programming around 2020 out of curiosity, taught Python to immigrant students at Lutheran Service School, and then built professional experience across software engineering, web development, AI, enterprise healthcare systems, and cybersecurity.',
+    'Gad was born in Rwanda, grew up in a Congolese household speaking Swahili, Kinyarwanda, and English, and moved to the United States with his family in 2018. He began programming around 2020 out of curiosity, taught Python to 25 students at Lutheran Service School — including learners with limited English — and then built professional experience across software engineering, web development, AI, enterprise healthcare systems, and cybersecurity.',
   inHisWords: `Imani was born in Rwanda and grew up in a Congolese household. At home he spoke Swahili, Kinyarwanda, and English. In 2018 his family moved to the United States. The move was exciting but overwhelming. He had to adapt to a new culture, a new school system, and a different way of life while figuring out where he fit in.
 
 He discovered programming around 2020 out of curiosity. He wanted to understand how apps and websites actually worked. The first things he built were small Python programs and simple websites. What kept him hooked was that every line of code had a visible result. It felt like solving puzzles while creating something useful from nothing.

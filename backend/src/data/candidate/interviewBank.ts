@@ -22,7 +22,7 @@ export const interviewBank: InterviewQuestion[] = [
     id: 'behavioral-lutheran',
     track: 'behavioral',
     prompt:
-      'You mentored 10 immigrant students in Python at Lutheran Service School, including students with limited English. Walk through how you explained a concept when language itself was the blocker.',
+      'You mentored 25 students in Python at Lutheran Service School, including students with limited English. Walk through how you explained a concept when language itself was the blocker.',
     followUps: [
       'What did you change after watching a student go from hesitant to presenting their own project?',
       'How does that teaching work show up when you explain a system to teammates now?',

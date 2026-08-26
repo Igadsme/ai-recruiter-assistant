@@ -60,7 +60,7 @@ export function buildRecruiterSummary(sources: Source[]): RecruiterSummary {
       'Python/TypeScript services and Redis-cached PostgreSQL at UpCancer',
       'RAG / Pinecone / Gemini work from the Headstarter fellowship',
       'DevDash: GitHub ingestion plus LLM summarization',
-      'Teaching Python to immigrant students at Lutheran Service School',
+      'Teaching Python to 25 students at Lutheran Service School',
     ],
   }
 }
@@ -116,6 +116,7 @@ export function toProjectDeepDive(projectId: string): ProjectDeepDive | undefine
     impact: [...project.impact],
     technologies: [...project.technologies],
     github: project.github,
+    website: project.website,
   }
 }
 

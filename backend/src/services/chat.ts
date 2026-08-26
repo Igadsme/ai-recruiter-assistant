@@ -440,7 +440,7 @@ function buildResumeResponse(
         .filter((name) => name !== 'Lutheran Service School')
         .join(', ')}.`,
       tags: experience.map((role) => role.organization).filter((name) => name !== 'Lutheran Service School'),
-      metrics: ['+15% throughput', '80%→20% backlog', '500+ users/reach'],
+      metrics: ['+15% throughput', '80%→20% backlog', '500+ users'],
     },
     {
       label: 'TECHNICAL SKILLS',

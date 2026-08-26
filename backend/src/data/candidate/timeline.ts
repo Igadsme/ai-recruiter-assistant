@@ -4,7 +4,7 @@ export const careerTimeline = [
     year: '2021',
     title: 'Coding Instructor',
     organization: 'Lutheran Service School',
-    detail: 'Mentored immigrant students in Python — his first stretch teaching technical concepts clearly.',
+    detail: 'Mentored 25 students in Python — his first stretch teaching technical concepts clearly.',
     sourceId: 'experience:lutheran',
   },
   {

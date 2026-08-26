@@ -57,6 +57,7 @@ export type ProjectDeepDive = {
   impact: string[]
   technologies: string[]
   github?: string
+  website?: string
 }
 
 export type RecruiterSession = {
@@ -296,12 +297,13 @@ export async function fetchSkills(): Promise<string[]> {
   const response = await fetch(`${API_BASE}/api/candidate/skills`)
   if (!response.ok) throw new ApiError('network', NETWORK_ERROR, response.status)
   const payload = await parseJson<{
-    skills: { languages?: string[]; frameworks?: string[]; tools?: string[] }
+    skills: { languages?: string[]; frameworks?: string[]; tools?: string[]; ai?: string[] }
   }>(response)
   return [
     ...(payload.skills.languages ?? []),
     ...(payload.skills.frameworks ?? []),
     ...(payload.skills.tools ?? []),
+    ...(payload.skills.ai ?? []),
   ]
 }
 

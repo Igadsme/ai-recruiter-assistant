@@ -41,7 +41,7 @@ export const differentiators = {
   communication: [
     {
       label: 'Coding instruction / mentoring',
-      evidence: 'Mentored 10 immigrant students in Python at Lutheran Service School.',
+      evidence: 'Mentored 25 students in Python at Lutheran Service School, including learners with limited English.',
       sourceIds: ['experience:lutheran'],
     },
     {

@@ -122,6 +122,7 @@ export type ProjectDeepDive = {
   impact: string[]
   technologies: string[]
   github?: string
+  website?: string
 }
 
 export type ChatResponse = {

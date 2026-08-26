@@ -31,7 +31,7 @@ describe('App chat', () => {
 
     render(<App />)
 
-    await user.type(screen.getByLabelText('Ask about Imani Gad'), 'Tell me about Imani Gad')
+    await user.type(screen.getByLabelText('Ask about Imani Gad'), 'What AI experience does Imani Gad have?')
     await user.keyboard('{Enter}')
 
     expect(await screen.findByText('THINKING')).toBeInTheDocument()
@@ -64,16 +64,16 @@ describe('App chat', () => {
       expect(screen.getByText(/born in Rwanda/)).toBeInTheDocument()
     }, { timeout: 4000 })
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /view sources/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /view evidence/i })).toBeInTheDocument()
     }, { timeout: 4000 })
     expect(screen.queryByText('SOURCES')).not.toBeInTheDocument()
     expect(screen.queryByText('SOFTWARE ENGINEERING')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /view sources/i }))
+    await user.click(screen.getByRole('button', { name: /view evidence/i }))
     expect(screen.getByText('SOURCES')).toBeInTheDocument()
     expect(screen.getByText(/UpCancer/)).toBeInTheDocument()
     expect(mockedSendChat).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: 'Tell me about Imani Gad',
+        message: 'What AI experience does Imani Gad have?',
         mode: 'general',
       }),
     )
@@ -97,7 +97,7 @@ describe('App chat', () => {
 
     expect(screen.queryByText('THINKING')).not.toBeInTheDocument()
     expect(await screen.findByText(/Imani's AI assistant/i)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /view sources/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /view evidence/i })).not.toBeInTheDocument()
     expect(screen.queryByText('RETRIEVAL')).not.toBeInTheDocument()
   })
 
@@ -145,6 +145,13 @@ describe('App chat', () => {
     await user.click(screen.getAllByRole('button', { name: 'Ask: Tell me about Imani Gad' })[0])
 
     expect(await screen.findByRole('alert')).toHaveTextContent('request limit')
+  })
+
+  it('shows recruiter journey paths on the idle page', () => {
+    render(<App />)
+    expect(screen.getByRole('button', { name: /meet imani/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /evaluate him for a role/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /explore his work/i })).toBeInTheDocument()
   })
 
   it('shows a work-in-progress footer on the idle page', () => {

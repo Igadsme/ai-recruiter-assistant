@@ -1,9 +1,13 @@
 import { randomUUID } from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { AppError, emptySession, type Conversation, type ConversationMessage, type RecruiterSession, type Source } from '../types.ts'
+import { config } from '../config.ts'
 
 const conversations = new Map<string, Conversation>()
 const MAX_MESSAGES = 24
-const TTL_MS = 1000 * 60 * 60 * 6
+const storePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.data/conversations.json')
 
 export function createConversation(): Conversation {
   pruneExpired()
@@ -16,6 +20,7 @@ export function createConversation(): Conversation {
     updatedAt: now,
   }
   conversations.set(conversation.id, conversation)
+  persist()
   return conversation
 }
 
@@ -41,6 +46,7 @@ export function appendMessage(id: string, message: ConversationMessage): Convers
   }
   conversation.updatedAt = Date.now()
   conversations.set(id, conversation)
+  persist()
   return conversation
 }
 
@@ -49,6 +55,7 @@ export function patchSession(id: string, patch: Partial<RecruiterSession>): Recr
   conversation.session = { ...conversation.session, ...patch }
   conversation.updatedAt = Date.now()
   conversations.set(id, conversation)
+  persist()
   return conversation.session
 }
 
@@ -94,6 +101,7 @@ export function recordRetrievalOnSession(id: string, sources: Source[], query: s
   }
   conversation.updatedAt = Date.now()
   conversations.set(id, conversation)
+  persist()
   return conversation.session
 }
 
@@ -102,8 +110,36 @@ export function resetConversationsForTests(): void {
 }
 
 function pruneExpired(): void {
-  const cutoff = Date.now() - TTL_MS
+  load()
+  const cutoff = Date.now() - config.sessionTtlMs
   for (const [id, conversation] of conversations) {
     if (conversation.updatedAt < cutoff) conversations.delete(id)
+  }
+}
+
+let loaded = false
+
+function load(): void {
+  if (loaded) return
+  loaded = true
+  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') return
+  try {
+    const raw = fs.readFileSync(storePath, 'utf8')
+    const parsed = JSON.parse(raw) as { conversations?: Conversation[] }
+    for (const conversation of parsed.conversations ?? []) {
+      conversations.set(conversation.id, conversation)
+    }
+  } catch {
+    // First boot or ephemeral filesystem.
+  }
+}
+
+function persist(): void {
+  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') return
+  try {
+    fs.mkdirSync(path.dirname(storePath), { recursive: true })
+    fs.writeFileSync(storePath, JSON.stringify({ conversations: [...conversations.values()] }))
+  } catch {
+    // File persistence is best-effort on ephemeral hosts.
   }
 }

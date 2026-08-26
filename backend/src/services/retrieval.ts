@@ -8,7 +8,8 @@ import {
   skills,
   story,
 } from '../data/candidate/index.ts'
-import type { CandidateCategory, RetrievalStage, Source, SourceType } from '../types.ts'
+import { cosineSimilarity, embedText } from './embeddings.ts'
+import type { CandidateCategory, ConversationIntent, RetrievalStage, Source, SourceType } from '../types.ts'
 
 export type RetrievalResult = {
   categories: CandidateCategory[]
@@ -20,6 +21,8 @@ export type RetrievalResult = {
   verificationNote?: string
   expandedTerms: string[]
   projectId?: string
+  insufficient: boolean
+  topScore: number
 }
 
 type Chunk = {
@@ -77,6 +80,10 @@ const CHUNKS: Chunk[] = buildChunks()
 const DOC_TOKENS = CHUNKS.map((chunk) => tokenize(`${chunk.text} ${chunk.aliases.join(' ')}`))
 const IDF = buildIdf(DOC_TOKENS)
 const CHUNK_VECTORS = DOC_TOKENS.map((tokens) => sparseTfidf(tokens))
+const CHUNK_EMBEDDINGS = CHUNKS.map((chunk) => embedText(`${chunk.text} ${chunk.aliases.join(' ')}`))
+const KNOWN_ORGS = new Set(
+  CHUNKS.flatMap((chunk) => [chunk.organization, chunk.title].filter(Boolean).map((value) => value!.toLowerCase())),
+)
 
 function buildChunks(): Chunk[] {
   const chunks: Chunk[] = [
@@ -353,24 +360,32 @@ export function analyzeQuery(query: string): CandidateCategory[] {
   return [...intents]
 }
 
-export function retrieveCandidateContext(query: string): RetrievalResult {
+export function retrieveCandidateContext(
+  query: string,
+  options: { intent?: ConversationIntent } = {},
+): RetrievalResult {
   const intents = analyzeQuery(query)
   const expandedTerms = expandQuery(query)
   const queryVector = sparseTfidf(expandedTerms)
+  const queryEmbedding = embedText(query)
+  const typeFilter = typeFilterForIntent(options.intent)
   const ranked = CHUNKS.map((chunk, index) => {
     const keywordScore = keywordRank(expandedTerms, chunk)
     const semanticScore = sparseCosine(queryVector, CHUNK_VECTORS[index])
+    const embeddingScore = cosineSimilarity(queryEmbedding, CHUNK_EMBEDDINGS[index])
     const intentBoost = intentScore(intents, chunk)
     const penalty = intentPenalty(intents, chunk)
+    const typeBoost = typeFilter && chunk.type === typeFilter ? 0.12 : 0
     return {
       chunk,
-      score: 0.5 * keywordScore + 0.35 * semanticScore + 0.15 * intentBoost - penalty,
+      score:
+        0.4 * keywordScore + 0.25 * semanticScore + 0.2 * embeddingScore + 0.15 * intentBoost + typeBoost - penalty,
     }
   })
     .sort((a, b) => b.score - a.score)
 
   const minScore = 0.08
-  let selected = ranked.filter((item) => item.score >= minScore).slice(0, 10)
+  let selected = rerank(ranked.filter((item) => item.score >= minScore).slice(0, 14), query).slice(0, 10)
 
   if (intents.includes('ai') && !intents.includes('cybersecurity')) {
     selected = selected.filter(
@@ -403,24 +418,66 @@ export function retrieveCandidateContext(query: string): RetrievalResult {
   }
 
   const sources = selected.map(({ chunk }) => toSource(chunk))
-  const context = buildContext(selected.map((item) => item.chunk), intents)
-  const askedUnknown = unknownTechnologies(query)
-  const verified = askedUnknown.length === 0
+  const topScore = selected[0]?.score ?? 0
+  const unknownEmployer = unknownEmployers(query)
+  const askedUnknown = [...unknownTechnologies(query), ...unknownEmployer]
+  const insufficient = Boolean(unknownEmployer.length) || (topScore < 0.09 && isSpecificUnknown(query))
+  const verified = askedUnknown.length === 0 && !insufficient
   const verificationNote = verified
     ? undefined
-    : `Not verified: the candidate file does not confirm experience with ${askedUnknown.join(', ')}.`
+    : `Not verified: the candidate file does not confirm experience with ${askedUnknown.join(', ') || 'that topic'}.`
 
   return {
     categories: intents,
     intents,
-    context,
-    sources: dedupeSources(sources),
+    context: insufficient ? '' : buildContext(selected.map((item) => item.chunk), intents),
+    sources: insufficient ? [] : dedupeSources(sources),
     stages: buildStages(intents, selected.map((item) => item.chunk)),
     verified,
     verificationNote,
     expandedTerms,
     projectId: inferProjectId(query),
+    insufficient,
+    topScore,
   }
+}
+
+function typeFilterForIntent(intent?: ConversationIntent): SourceType | undefined {
+  if (intent === 'experience') return 'experience'
+  if (intent === 'projects') return 'project'
+  if (intent === 'skills') return 'skill'
+  if (intent === 'story') return 'story'
+  return undefined
+}
+
+function rerank(ranked: Array<{ chunk: Chunk; score: number }>, query: string): Array<{ chunk: Chunk; score: number }> {
+  const lower = query.toLowerCase()
+  return ranked
+    .map((item) => {
+      let score = item.score
+      if (item.chunk.organization && lower.includes(item.chunk.organization.toLowerCase())) score += 0.25
+      if (lower.includes(item.chunk.title.toLowerCase())) score += 0.2
+      for (const tech of item.chunk.technologies) {
+        if (lower.includes(tech.toLowerCase())) score += 0.05
+      }
+      return { ...item, score }
+    })
+    .sort((a, b) => b.score - a.score)
+}
+
+function unknownEmployers(query: string): string[] {
+  const mentioned = [...query.matchAll(/\b[A-Z][A-Za-z0-9&.]{2,24}\b/g)].map((match) => match[0])
+  const skip = new Set(['Imani', 'Gad', 'What', 'Does', 'Have', 'Tell', 'About', 'How', 'The', 'His'])
+  return mentioned.filter((name) => {
+    if (skip.has(name)) return false
+    const lower = name.toLowerCase()
+    if (KNOWN_ORGS.has(lower)) return false
+    return /^(Google|Meta|Netflix|Amazon|Apple|Uber|Stripe|Nvidia|OpenAI)$/i.test(name)
+  })
+}
+
+function isSpecificUnknown(query: string): boolean {
+  return /\b(did he|has he|was he|intern(ed)? at|worked at|certification|clearance)\b/i.test(query)
 }
 
 function inferProjectId(query: string): string | undefined {

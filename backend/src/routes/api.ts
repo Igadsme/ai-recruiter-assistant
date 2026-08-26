@@ -24,26 +24,31 @@ import {
   postFit,
   postInterview,
 } from '../controllers/recruiterController.ts'
-import { chatRateLimiter } from '../middleware/rateLimit.ts'
+import {
+  analyticsRateLimiter,
+  chatRateLimiter,
+  fitRateLimiter,
+  generalRateLimiter,
+} from '../middleware/rateLimit.ts'
 
 export const apiRouter = Router()
 
 apiRouter.get('/health', getHealth)
 apiRouter.post('/chat', chatRateLimiter, postChat)
-apiRouter.post('/conversations', postConversation)
-apiRouter.get('/conversations/:id', getConversationById)
-apiRouter.patch('/conversations/:id/session', patchConversationSession)
-apiRouter.get('/candidate/profile', getProfile)
-apiRouter.get('/candidate/experience', getExperience)
-apiRouter.get('/candidate/projects', getProjects)
-apiRouter.get('/candidate/projects/:id', getProjectById)
-apiRouter.get('/candidate/skills', getSkills)
-apiRouter.get('/candidate/brief', getBrief)
-apiRouter.get('/candidate/timeline', getTimeline)
-apiRouter.get('/candidate/sources', getSources)
-apiRouter.get('/candidate/sources/:id', getSource)
-apiRouter.post('/fit', chatRateLimiter, postFit)
-apiRouter.get('/interview/tracks', getInterviewTracks)
+apiRouter.post('/conversations', generalRateLimiter, postConversation)
+apiRouter.get('/conversations/:id', generalRateLimiter, getConversationById)
+apiRouter.patch('/conversations/:id/session', generalRateLimiter, patchConversationSession)
+apiRouter.get('/candidate/profile', generalRateLimiter, getProfile)
+apiRouter.get('/candidate/experience', generalRateLimiter, getExperience)
+apiRouter.get('/candidate/projects', generalRateLimiter, getProjects)
+apiRouter.get('/candidate/projects/:id', generalRateLimiter, getProjectById)
+apiRouter.get('/candidate/skills', generalRateLimiter, getSkills)
+apiRouter.get('/candidate/brief', generalRateLimiter, getBrief)
+apiRouter.get('/candidate/timeline', generalRateLimiter, getTimeline)
+apiRouter.get('/candidate/sources', generalRateLimiter, getSources)
+apiRouter.get('/candidate/sources/:id', generalRateLimiter, getSource)
+apiRouter.post('/fit', fitRateLimiter, postFit)
+apiRouter.get('/interview/tracks', generalRateLimiter, getInterviewTracks)
 apiRouter.post('/interview', chatRateLimiter, postInterview)
-apiRouter.post('/analytics/events', postAnalyticsEvent)
-apiRouter.get('/analytics', getAnalytics)
+apiRouter.post('/analytics/events', analyticsRateLimiter, postAnalyticsEvent)
+apiRouter.get('/analytics', analyticsRateLimiter, getAnalytics)

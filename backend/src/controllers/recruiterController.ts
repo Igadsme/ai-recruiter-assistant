@@ -7,10 +7,16 @@ import { retrieveCandidateContext } from '../services/retrieval.ts'
 import { config } from '../config.ts'
 import { AppError } from '../types.ts'
 import { analyticsEventSchema, fitRequestSchema, interviewRequestSchema } from '../utils/validation.ts'
+import { detectPromptInjection, wrapUntrustedData } from '../services/security.ts'
+import { metricsSnapshot } from '../services/metrics.ts'
 
 export const postFit: RequestHandler = (req, res, next) => {
   try {
     const body = fitRequestSchema.parse(req.body)
+    if (detectPromptInjection(body.jobDescription)) {
+      throw new AppError(400, 'Job description looks like an instruction override.', 'untrusted_input')
+    }
+    wrapUntrustedData('job description', body.jobDescription)
     const analysis = analyzeFit(body.jobDescription)
     trackEvent({ type: 'fit_analyzed', conversationId: body.conversationId })
     if (body.conversationId) {
@@ -61,7 +67,7 @@ export const getAnalytics: RequestHandler = (req, res, next) => {
     if (!config.analyticsKey || provided !== config.analyticsKey) {
       throw new AppError(401, 'Analytics access denied.', 'unauthorized')
     }
-    res.json(analyticsSummary())
+    res.json({ ...analyticsSummary(), observability: metricsSnapshot() })
   } catch (error) {
     next(error)
   }

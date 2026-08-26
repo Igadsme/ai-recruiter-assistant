@@ -20,7 +20,7 @@ import { useSpeechRecognition } from './hooks/useSpeechRecognition'
 import { useSpeechSynthesis } from './hooks/useSpeechSynthesis'
 import { RecruiterBriefCard } from './components/RecruiterBrief'
 import { ProjectDeepDiveCard } from './components/ProjectDeepDiveCard'
-import { FitPanel } from './components/FitPanel'
+import { FitPanel } from './features/fit-analysis/FitPanel'
 import { InterviewPanel } from './components/InterviewPanel'
 import { CareerTimeline } from './components/CareerTimeline'
 import { RecruiterSessionPanel } from './components/RecruiterSessionPanel'
@@ -28,6 +28,7 @@ import { AnalyticsDashboard } from './components/AnalyticsDashboard'
 import { ContactCta, FollowUps, SourcesDisclosure } from './components/ChatExtras'
 import { DifferentiatorsCard } from './components/RecruiterCards'
 import { HeaderChip } from './components/ui'
+import { RecruiterJourney } from './features/recruiter/RecruiterJourney'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -879,10 +880,11 @@ function AssistantMessage({
       return
     }
     let i = 0
+    const words = fullIntro.split(/(\s+)/)
     const iv = setInterval(() => {
       i++
-      setDisplayedIntro(fullIntro.slice(0, i))
-      if (i >= fullIntro.length) {
+      setDisplayedIntro(words.slice(0, i).join(''))
+      if (i >= words.length) {
         clearInterval(iv)
         setStreaming(false)
         sections.forEach((_, idx) => {
@@ -890,7 +892,7 @@ function AssistantMessage({
         })
         setTimeout(() => setEvidenceVisible(true), sections.length * 180 + 260)
       }
-    }, 5)
+    }, 28)
     return () => clearInterval(iv)
   }, []) // eslint-disable-line
 
@@ -905,9 +907,6 @@ function AssistantMessage({
       className="animate-fade-up"
       style={{ width: '100%', maxWidth: 680 }}
     >
-      {r && !r.conversational && r.verificationNote && (
-        <VerifiedBadgeNote note={r.verificationNote} />
-      )}
       <p
         className={streaming ? 'streaming-cursor' : ''}
         style={{
@@ -1923,10 +1922,16 @@ function AssistantShell() {
                     color: 'rgba(255,255,255,0.30)',
                     letterSpacing: '-0.01em',
                     fontWeight: 380,
+                    marginBottom: 18,
                   }}
                 >
-                  Ask me about Imani Gad's experience, skills, projects, or story.
+                  I'm Imani's AI assistant — ask about his experience, or pick a path below.
                 </p>
+                <RecruiterJourney
+                  onMeet={() => void handleQuery('Who is Imani?')}
+                  onEvaluate={() => setOverlay('fit')}
+                  onExplore={() => setOverlay('timeline')}
+                />
               </div>
               )}
 

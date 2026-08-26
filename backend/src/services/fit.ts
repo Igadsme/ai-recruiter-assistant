@@ -1,6 +1,7 @@
 import { experience, projects, skills } from '../data/candidate/index.ts'
+import { wrapUntrustedData } from './security.ts'
 import { normalizeTech } from './retrieval.ts'
-import type { FitAnalysis, FitMatch } from '../types.ts'
+import type { FitAnalysis, FitCoverage, FitMatch, FitRequirement } from '../types.ts'
 
 type InventoryRow = {
   name: string
@@ -19,6 +20,7 @@ const ALIASES: Record<string, string[]> = {
   react: ['reactjs'],
   kubernetes: ['k8s'],
   'rest apis': ['rest', 'api', 'apis'],
+  'microsoft sentinel': ['sentinel', 'azure sentinel'],
 }
 
 function inventory(): InventoryRow[] {
@@ -47,12 +49,7 @@ function inventory(): InventoryRow[] {
   }
   for (const role of experience) {
     for (const tech of role.technologies) {
-      add(
-        tech,
-        `Used as ${role.role} at ${role.organization}.`,
-        [`experience:${role.id}`],
-        true,
-      )
+      add(tech, `Used as ${role.role} at ${role.organization}.`, [`experience:${role.id}`], true)
     }
   }
   for (const project of projects) {
@@ -110,12 +107,31 @@ const INTERESTING = new Set(
   ],
 )
 
+function coverage(items: FitRequirement[], kind: FitRequirement['kind']): FitCoverage {
+  const scoped = items.filter((item) => item.kind === kind)
+  const matched = scoped.filter((item) => item.status !== 'missing').length
+  const total = scoped.length
+  return { matched, total, percent: total === 0 ? 100 : Math.round((matched / total) * 100) }
+}
+
+function classifyKind(term: string, jobDescription: string): FitRequirement['kind'] {
+  const lower = jobDescription.toLowerCase()
+  const index = lower.indexOf(term.toLowerCase())
+  if (index === -1) return 'required'
+  const window = lower.slice(Math.max(0, index - 180), index + term.length + 80)
+  if (/\b(preferred|nice to have|bonus|plus)\b/.test(window)) return 'preferred'
+  return 'required'
+}
+
 export function analyzeFit(jobDescription: string): FitAnalysis {
+  wrapUntrustedData('job description', jobDescription)
   const terms = extractTerms(jobDescription)
   const seen = new Set<string>()
   const strong: FitMatch[] = []
   const partial: FitMatch[] = []
   const missing: string[] = []
+  const missingDetails: FitAnalysis['missingDetails'] = []
+  const matrix: FitRequirement[] = []
 
   for (const term of terms) {
     const normalized = normalizeTech(term)
@@ -123,9 +139,16 @@ export function analyzeFit(jobDescription: string): FitAnalysis {
     if (seen.has(normalized)) continue
     seen.add(normalized)
 
+    const kind = classifyKind(term, jobDescription)
     const row = findRow(term)
     if (!row) {
-      missing.push(prettyMissing(term))
+      const label = prettyMissing(term)
+      missing.push(label)
+      missingDetails.push({
+        requirement: label,
+        notes: 'Not in the verified candidate file. Do not treat this as experience.',
+      })
+      matrix.push({ requirement: label, kind, status: 'missing', sourceIds: [] })
       continue
     }
     const match = {
@@ -133,15 +156,33 @@ export function analyzeFit(jobDescription: string): FitAnalysis {
       evidence: row.evidence,
       sourceIds: row.sourceIds,
     }
-    if (row.demonstrated) strong.push(match)
-    else partial.push(match)
+    if (row.demonstrated) {
+      strong.push(match)
+      matrix.push({
+        requirement: row.name,
+        kind,
+        status: 'strong',
+        evidence: row.evidence,
+        sourceIds: row.sourceIds,
+      })
+    } else {
+      partial.push(match)
+      matrix.push({
+        requirement: row.name,
+        kind,
+        status: 'partial',
+        evidence: row.evidence,
+        sourceIds: row.sourceIds,
+      })
+    }
   }
 
   const relevantProjects = projects
     .map((project) => {
-      const overlap = project.technologies.filter((tech) =>
-        strong.some((item) => item.technology.toLowerCase() === tech.toLowerCase()) ||
-        partial.some((item) => item.technology.toLowerCase() === tech.toLowerCase()),
+      const overlap = project.technologies.filter(
+        (tech) =>
+          strong.some((item) => item.technology.toLowerCase() === tech.toLowerCase()) ||
+          partial.some((item) => item.technology.toLowerCase() === tech.toLowerCase()),
       )
       return {
         id: project.id,
@@ -156,6 +197,27 @@ export function analyzeFit(jobDescription: string): FitAnalysis {
     .sort((a, b) => b.score - a.score)
     .map(({ id, title, reason }) => ({ id, title, reason }))
 
+  const requiredCoverage = coverage(matrix, 'required')
+  const preferredCoverage = coverage(matrix, 'preferred')
+  const overallScore = Math.round(requiredCoverage.percent * 0.7 + preferredCoverage.percent * 0.3)
+
+  const transferable = partial.map((item) => ({
+    skill: item.technology,
+    evidence: `${item.evidence} Adjacent rather than production-proven for this posting.`,
+    sourceIds: item.sourceIds,
+  }))
+
+  const hiringRisks = [
+    missing.length > 0 ? `Missing verified experience with ${missing.slice(0, 3).join(', ')}.` : '',
+    'Imani is a December 2026 new-grad candidate — not a senior hire.',
+    partial.length > 0
+      ? `Some tools (${partial
+          .slice(0, 2)
+          .map((item) => item.technology)
+          .join(', ')}) appear on the skills list without a dedicated production role.`
+      : '',
+  ].filter(Boolean)
+
   const roleHint = inferRoleHint(jobDescription)
   const interviewQuestions = [
     strong.some((item) => /python/i.test(item.technology))
@@ -169,13 +231,31 @@ export function analyzeFit(jobDescription: string): FitAnalysis {
       : 'How did he evaluate RAG quality during the Headstarter fellowship?',
   ]
 
+  const whyInterview = [
+    `Imani is a ${roleHint} candidate with demonstrated work in ${strong.slice(0, 3).map((item) => item.technology).join(', ') || 'software, AI, and automation'}.`,
+    missing.length > 0
+      ? `Interview to test adjacent strength — do not assume ${missing[0]} experience.`
+      : 'The verified file covers the core stack in this posting.',
+    relevantProjects[0] ? `${relevantProjects[0].title} is the strongest project overlap.` : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return {
     roleHint,
+    overallScore,
+    requiredCoverage,
+    preferredCoverage,
     strong,
     partial,
     missing,
+    missingDetails,
+    transferable,
     relevantProjects,
     interviewQuestions,
+    hiringRisks,
+    whyInterview,
+    requirementMatrix: matrix,
   }
 }
 

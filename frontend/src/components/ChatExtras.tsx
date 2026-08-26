@@ -58,7 +58,10 @@ export function ContactCta({
         background: 'rgba(110,168,255,0.05)',
       }}
     >
-      <MonoLabel>INTERESTED IN INTERVIEWING IMANI?</MonoLabel>
+      <MonoLabel>IMANI APPEARS RELEVANT TO THE AREAS YOU EXPLORED</MonoLabel>
+      <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginTop: 8, lineHeight: 1.5 }}>
+        Would you like to view his résumé or contact him?
+      </p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
         <button type="button" onClick={onResume} style={ctaStyle}>
           View resume
@@ -145,7 +148,7 @@ export function SourcesDisclosure({
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        aria-label={open ? 'Hide sources' : 'View sources'}
+        aria-label={open ? 'Hide evidence' : 'View evidence'}
         style={{
           fontFamily: "'DM Mono', monospace",
           fontSize: 10,
@@ -158,7 +161,7 @@ export function SourcesDisclosure({
           cursor: 'pointer',
         }}
       >
-        {open ? 'HIDE SOURCES' : 'VIEW SOURCES'}
+        {open ? 'HIDE EVIDENCE' : 'VIEW EVIDENCE'}
       </button>
       {open && (
         <div className="animate-fade-in" style={{ marginTop: 12 }}>

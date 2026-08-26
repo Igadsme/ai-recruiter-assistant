@@ -23,7 +23,7 @@ describe('classifyConversationIntent', () => {
   it('introduces Imani without treating named roles as bios', () => {
     expect(classifyConversationIntent('Who is Imani?')).toBe('introduction')
     expect(classifyConversationIntent('Tell me about Imani Gad')).toBe('introduction')
-    expect(classifyConversationIntent('Tell me about Shaw')).toBe('candidate')
+    expect(classifyConversationIntent('Tell me about Shaw')).toBe('experience')
   })
 
   it('routes hiring, proof, and resume questions', () => {
@@ -33,14 +33,15 @@ describe('classifyConversationIntent', () => {
   })
 
   it('keeps a greeting plus a real question on the question', () => {
-    expect(classifyConversationIntent('Hi, tell me about Shaw')).toBe('candidate')
+    expect(classifyConversationIntent('Hi, tell me about Shaw')).toBe('experience')
   })
 })
 
 describe('conversational replies', () => {
   it('greets as Imani’s assistant without a résumé dump', () => {
     const reply = conversationalReply('greeting', 0)
-    expect(reply).toBe("Hey! I'm Imani's AI assistant. What would you like to know about him?")
+    expect(reply).toMatch(/Imani's AI assistant/)
+    expect(reply).toMatch(/experience, projects, skills/)
     expect(needsRetrieval('greeting')).toBe(false)
     expect(needsLlm('greeting')).toBe(false)
   })

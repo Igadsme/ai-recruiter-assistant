@@ -6,11 +6,22 @@ export type ConversationIntent =
   | 'thanks'
   | 'assistant'
   | 'introduction'
+  | 'experience'
+  | 'projects'
+  | 'skills'
+  | 'story'
   | 'why_hire'
+  | 'fit_analysis'
+  | 'interview'
   | 'proof'
   | 'resume'
   | 'contact'
+  | 'vague'
+  | 'unsupported'
+  | 'sensitive'
   | 'candidate'
+
+export type PipelinePath = 'casual' | 'candidate' | 'recruiter_tool'
 
 export type SourceType =
   | 'experience'
@@ -130,6 +141,10 @@ export type ChatResponse = {
   intent: ConversationIntent
   conversational: boolean
   revealSources: boolean
+  pipelinePath?: PipelinePath
+  claims?: EvidenceClaim[]
+  fitAnalysis?: FitAnalysis
+  clarifying?: boolean
 }
 
 export type CandidateCategory =
@@ -154,13 +169,44 @@ export type FitMatch = {
   sourceIds: string[]
 }
 
+export type FitCoverage = {
+  matched: number
+  total: number
+  percent: number
+}
+
+export type FitRequirement = {
+  requirement: string
+  kind: 'required' | 'preferred'
+  status: 'strong' | 'partial' | 'missing'
+  evidence?: string
+  sourceIds: string[]
+}
+
 export type FitAnalysis = {
   roleHint: string
+  overallScore: number
+  requiredCoverage: FitCoverage
+  preferredCoverage: FitCoverage
   strong: FitMatch[]
   partial: FitMatch[]
   missing: string[]
+  missingDetails: Array<{ requirement: string; notes: string }>
+  transferable: Array<{ skill: string; evidence: string; sourceIds: string[] }>
   relevantProjects: Array<{ id: string; title: string; reason: string }>
   interviewQuestions: string[]
+  hiringRisks: string[]
+  whyInterview: string
+  requirementMatrix: FitRequirement[]
+}
+
+export type EvidenceClaim = {
+  claim: string
+  supported: boolean
+  organization?: string
+  title?: string
+  technologies?: string[]
+  sourceIds: string[]
 }
 
 export class AppError extends Error {

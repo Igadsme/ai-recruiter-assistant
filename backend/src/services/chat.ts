@@ -3,18 +3,28 @@ import {
   casualFollowUps,
   classifyConversationIntent,
   conversationalReply,
+  injectionReply,
   introductionReply,
   isBareProofQuery,
   isConversationalIntent,
   needsLlm,
   needsRetrieval,
+  pipelinePath,
   proofReply,
+  sensitiveReply,
+  unsupportedReply,
+  vagueReply,
 } from './intent.ts'
 import {
   isContactQuery,
   retrieveCandidateContext,
   type RetrievalResult,
 } from './retrieval.ts'
+import { detectPromptInjection, wrapUntrustedData } from './security.ts'
+import { resolveFollowUpQuery } from './followUp.ts'
+import { insufficientEvidenceReply, verifyClaims } from './verify.ts'
+import { analyzeFit } from './fit.ts'
+import { recordMetric } from './metrics.ts'
 import { getLlmClient, parseStructuredResponse } from './gemini.ts'
 import { appendMessage, getOrCreateConversation, patchSession, recordRetrievalOnSession } from './conversation.ts'
 import { trackEvent } from './analytics.ts'
@@ -39,18 +49,75 @@ export async function handleChat(input: {
   conversationId?: string
   mode: ChatMode
 }): Promise<ChatResponse> {
+  const started = Date.now()
   const conversation = getOrCreateConversation(input.conversationId)
+
+  if (detectPromptInjection(input.message)) {
+    const message = injectionReply()
+    const response = conversationalResponse({
+      conversationId: conversation.id,
+      session: conversation.session,
+      message,
+      intent: 'unsupported',
+      followUps: casualFollowUps('assistant'),
+    })
+    persistTurn(conversation.id, input.message, message)
+    recordMetric('injection_blocked', Date.now() - started)
+    return response
+  }
+
   const intent = classifyConversationIntent(input.message)
+  const path = pipelinePath(intent)
 
   if (isConversationalIntent(intent)) {
     const message = conversationalReply(intent, conversation.messages.length)
-    const session = conversation.session
     const response = conversationalResponse({
       conversationId: conversation.id,
-      session,
+      session: conversation.session,
       message,
       intent,
       followUps: casualFollowUps(intent),
+    })
+    persistTurn(conversation.id, input.message, message)
+    recordMetric('casual_reply', Date.now() - started)
+    return response
+  }
+
+  if (intent === 'vague') {
+    const message = vagueReply()
+    const response = conversationalResponse({
+      conversationId: conversation.id,
+      session: conversation.session,
+      message,
+      intent,
+      followUps: casualFollowUps(intent),
+      clarifying: true,
+    })
+    persistTurn(conversation.id, input.message, message)
+    return response
+  }
+
+  if (intent === 'unsupported') {
+    const message = unsupportedReply()
+    const response = conversationalResponse({
+      conversationId: conversation.id,
+      session: conversation.session,
+      message,
+      intent,
+      followUps: casualFollowUps('assistant'),
+    })
+    persistTurn(conversation.id, input.message, message)
+    return response
+  }
+
+  if (intent === 'sensitive') {
+    const message = sensitiveReply()
+    const response = conversationalResponse({
+      conversationId: conversation.id,
+      session: conversation.session,
+      message,
+      intent,
+      followUps: casualFollowUps('assistant'),
     })
     persistTurn(conversation.id, input.message, message)
     return response
@@ -58,11 +125,10 @@ export async function handleChat(input: {
 
   if (intent === 'introduction') {
     const message = introductionReply()
-    const session = conversation.session
     trackEvent({ type: 'question_asked', query: input.message, conversationId: conversation.id })
     const response = conversationalResponse({
       conversationId: conversation.id,
-      session,
+      session: conversation.session,
       message,
       intent,
       followUps: casualFollowUps(intent),
@@ -79,9 +145,53 @@ export async function handleChat(input: {
     return response
   }
 
-  const retrievalQuery = resolveRetrievalQuery(input.message, conversation.messages, intent)
+  if (intent === 'fit_analysis') {
+    const analysis = analyzeFit(input.message)
+    const session = recordRetrievalOnSession(conversation.id, [], input.message)
+    trackEvent({ type: 'fit_analyzed', conversationId: conversation.id })
+    const message = [
+      `Overall match: ${analysis.overallScore}/100 for ${analysis.roleHint}.`,
+      `Required coverage ${analysis.requiredCoverage.percent}%. Preferred coverage ${analysis.preferredCoverage.percent}%.`,
+      analysis.missing.length > 0
+        ? `Missing from the verified file: ${analysis.missing.join(', ')} — I will not claim those.`
+        : 'No missing required tools jumped out of this posting.',
+      analysis.whyInterview,
+    ].join(' ')
+    persistTurn(conversation.id, input.message, message)
+    return {
+      ...conversationalResponse({
+        conversationId: conversation.id,
+        session,
+        message,
+        intent,
+        followUps: analysis.interviewQuestions.slice(0, 3),
+      }),
+      conversational: false,
+      fitAnalysis: analysis,
+      pipelinePath: path,
+    }
+  }
+
+  if (intent === 'interview') {
+    const message =
+      'I can run a grounded interview simulation — pick behavioral, Python, backend, AI, or system design, or ask a specific question about his work.'
+    const response = conversationalResponse({
+      conversationId: conversation.id,
+      session: conversation.session,
+      message,
+      intent,
+      followUps: ['Tell me about DevDash', 'What backend experience does he have?', 'Why should we hire him?'],
+    })
+    persistTurn(conversation.id, input.message, message)
+    return response
+  }
+
+  const retrievalQuery = resolveFollowUpQuery(
+    resolveRetrievalQuery(input.message, conversation.messages, intent),
+    conversation.messages,
+  )
   const retrieval = needsRetrieval(intent)
-    ? retrieveCandidateContext(retrievalQuery)
+    ? retrieveCandidateContext(retrievalQuery, { intent })
     : emptyRetrieval()
   const session = recordRetrievalOnSession(conversation.id, retrieval.sources, input.message)
   trackEvent({ type: 'question_asked', query: input.message, conversationId: conversation.id })
@@ -91,6 +201,19 @@ export async function handleChat(input: {
     const response = buildProofResponse(conversation.id, session, retrieval, message)
     persistTurn(conversation.id, input.message, message)
     return response
+  }
+
+  if (retrieval.insufficient) {
+    const message = insufficientEvidenceReply()
+    const response = conversationalResponse({
+      conversationId: conversation.id,
+      session,
+      message,
+      intent,
+      followUps: casualFollowUps('assistant'),
+    })
+    persistTurn(conversation.id, input.message, message)
+    return { ...response, conversational: false, verified: false, verificationNote: retrieval.verificationNote }
   }
 
   if (!needsLlm(intent)) {
@@ -109,7 +232,7 @@ export async function handleChat(input: {
   let generated
   try {
     generated = await getLlmClient().generate({
-      message: input.message,
+      message: wrapUntrustedData('recruiter question', input.message),
       mode: input.mode,
       context: retrieval.context,
       history: conversation.messages,
@@ -118,6 +241,7 @@ export async function handleChat(input: {
       intent,
     })
   } catch (error) {
+    recordMetric('gemini_failure', Date.now() - started)
     if (error instanceof AppError) throw error
     throw new AppError(503, 'The assistant is temporarily unavailable.', 'gemini_unavailable')
   }
@@ -131,6 +255,12 @@ export async function handleChat(input: {
     ),
   )
 
+  const verification = verifyClaims(spoken, retrieval.sources)
+  const grounded =
+    verification.unsupportedRate > 0.5 && retrieval.sources.length > 0
+      ? insufficientEvidenceReply()
+      : spoken
+
   const whyHire = intent === 'why_hire'
   const projectDeepDive =
     !whyHire && retrieval.projectId ? toProjectDeepDive(retrieval.projectId) : undefined
@@ -139,12 +269,12 @@ export async function handleChat(input: {
   }
 
   const response: ChatResponse = {
-    message: spoken,
+    message: grounded,
     sections: isResume ? generated.sections : [],
     sources: retrieval.sources.slice(0, 8),
     conversationId: conversation.id,
     isResume,
-    verified: retrieval.verified,
+    verified: retrieval.verified && verification.unsupportedRate < 0.35,
     verificationNote: retrieval.verificationNote,
     followUps: buildFollowUps(input.message, retrieval.sources),
     retrievalStages: retrieval.stages,
@@ -156,9 +286,12 @@ export async function handleChat(input: {
     intent,
     conversational: false,
     revealSources: false,
+    pipelinePath: path,
+    claims: verification.claims,
   }
 
-  persistTurn(conversation.id, input.message, spoken)
+  persistTurn(conversation.id, input.message, grounded)
+  recordMetric('grounded_reply', Date.now() - started)
   return response
 }
 
@@ -227,6 +360,7 @@ function conversationalResponse(input: {
   message: string
   intent: ConversationIntent
   followUps: string[]
+  clarifying?: boolean
 }): ChatResponse {
   return {
     message: input.message,
@@ -242,6 +376,8 @@ function conversationalResponse(input: {
     intent: input.intent,
     conversational: true,
     revealSources: false,
+    pipelinePath: pipelinePath(input.intent),
+    clarifying: input.clarifying,
   }
 }
 
@@ -278,6 +414,8 @@ function emptyRetrieval(): RetrievalResult {
     stages: [],
     verified: true,
     expandedTerms: [],
+    insufficient: false,
+    topScore: 1,
   }
 }
 

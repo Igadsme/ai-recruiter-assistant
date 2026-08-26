@@ -120,11 +120,24 @@ export type TimelineNode = {
 
 export type FitAnalysis = {
   roleHint: string
+  overallScore?: number
+  requiredCoverage?: { matched: number; total: number; percent: number }
+  preferredCoverage?: { matched: number; total: number; percent: number }
   strong: Array<{ technology: string; evidence: string; sourceIds: string[] }>
   partial: Array<{ technology: string; evidence: string; sourceIds: string[] }>
   missing: string[]
+  transferable?: Array<{ skill: string; evidence: string; sourceIds: string[] }>
   relevantProjects: Array<{ id: string; title: string; reason: string }>
   interviewQuestions: string[]
+  hiringRisks?: string[]
+  whyInterview?: string
+  requirementMatrix?: Array<{
+    requirement: string
+    kind: 'required' | 'preferred'
+    status: 'strong' | 'partial' | 'missing'
+    evidence?: string
+    sourceIds: string[]
+  }>
 }
 
 export type InterviewTrack = {

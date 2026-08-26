@@ -64,4 +64,13 @@ export const config = {
   get analyticsKey() {
     return process.env.ANALYTICS_KEY ?? ''
   },
+  get sessionTtlMs() {
+    return Number(process.env.SESSION_TTL_MS ?? 1000 * 60 * 60 * 6)
+  },
+  get dataRetentionDays() {
+    return Number(process.env.DATA_RETENTION_DAYS ?? 30)
+  },
+  get databaseUrl() {
+    return process.env.DATABASE_URL ?? ''
+  },
 }

@@ -1,6 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isPostgresEnabled } from '../db/pool.ts'
+import { insertAnalyticsEvent, loadAnalyticsEvents } from '../db/analyticsRepo.ts'
 
 export type AnalyticsEventType =
   | 'portfolio_visit'
@@ -31,13 +33,17 @@ const storePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 let memory: AnalyticsStore = { events: [] }
 let loaded = false
 
-function persist(): void {
-  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') return
+function isTest(): boolean {
+  return process.env.VITEST === 'true' || process.env.NODE_ENV === 'test'
+}
+
+function persistJson(): void {
+  if (isTest() || isPostgresEnabled()) return
   try {
     fs.mkdirSync(path.dirname(storePath), { recursive: true })
     fs.writeFileSync(storePath, JSON.stringify(memory, null, 0))
   } catch {
-    // File persistence is best-effort on ephemeral hosts.
+    // Best-effort without DATABASE_URL.
   }
 }
 
@@ -48,15 +54,24 @@ export function trackEvent(event: Omit<AnalyticsEvent, 'at'> & { at?: number }):
   if (store.events.length > MAX_EVENTS) {
     store.events = store.events.slice(-MAX_EVENTS)
   }
-  persist()
+  persistJson()
+  if (isPostgresEnabled()) {
+    void insertAnalyticsEvent(recorded)
+  }
   return recorded
 }
 
 function load(): AnalyticsStore {
   if (loaded) return memory
   loaded = true
-  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') {
+  if (isTest()) {
     memory = { events: [] }
+    return memory
+  }
+  if (isPostgresEnabled()) {
+    void loadAnalyticsEvents(Date.now() - 30 * 24 * 60 * 60 * 1000).then((events) => {
+      memory = { events }
+    })
     return memory
   }
   try {

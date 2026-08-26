@@ -4,13 +4,26 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { AppError, emptySession, type Conversation, type ConversationMessage, type RecruiterSession, type Source } from '../types.ts'
 import { config } from '../config.ts'
+import { isPostgresEnabled } from '../db/pool.ts'
+import {
+  insertSession,
+  loadSession,
+  pruneExpiredSessions,
+  replaceMessages,
+  saveSession,
+} from '../db/sessions.ts'
 
 const conversations = new Map<string, Conversation>()
 const MAX_MESSAGES = 24
 const storePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.data/conversations.json')
+let loaded = false
 
-export function createConversation(): Conversation {
-  pruneExpired()
+function isTest(): boolean {
+  return process.env.VITEST === 'true' || process.env.NODE_ENV === 'test'
+}
+
+export async function createConversation(): Promise<Conversation> {
+  await pruneExpired()
   const now = Date.now()
   const conversation: Conversation = {
     id: randomUUID(),
@@ -20,47 +33,56 @@ export function createConversation(): Conversation {
     updatedAt: now,
   }
   conversations.set(conversation.id, conversation)
-  persist()
-  return conversation
-}
-
-export function getConversation(id: string): Conversation {
-  pruneExpired()
-  const conversation = conversations.get(id)
-  if (!conversation) {
-    throw new AppError(404, 'Conversation not found.', 'conversation_not_found')
+  if (isPostgresEnabled()) {
+    await insertSession(conversation)
+  } else {
+    persistJson()
   }
   return conversation
 }
 
-export function getOrCreateConversation(id?: string): Conversation {
+export async function getConversation(id: string): Promise<Conversation> {
+  await pruneExpired()
+  const cached = conversations.get(id)
+  if (cached) return cached
+  if (isPostgresEnabled()) {
+    const loadedSession = await loadSession(id)
+    if (loadedSession) {
+      conversations.set(id, loadedSession)
+      return loadedSession
+    }
+  }
+  throw new AppError(404, 'Conversation not found.', 'conversation_not_found')
+}
+
+export async function getOrCreateConversation(id?: string): Promise<Conversation> {
   if (!id) return createConversation()
   return getConversation(id)
 }
 
-export function appendMessage(id: string, message: ConversationMessage): Conversation {
-  const conversation = getConversation(id)
+export async function appendMessage(id: string, message: ConversationMessage): Promise<Conversation> {
+  const conversation = await getConversation(id)
   conversation.messages.push(message)
   if (conversation.messages.length > MAX_MESSAGES) {
     conversation.messages = conversation.messages.slice(-MAX_MESSAGES)
   }
   conversation.updatedAt = Date.now()
   conversations.set(id, conversation)
-  persist()
+  await persistConversation(conversation)
   return conversation
 }
 
-export function patchSession(id: string, patch: Partial<RecruiterSession>): RecruiterSession {
-  const conversation = getConversation(id)
+export async function patchSession(id: string, patch: Partial<RecruiterSession>): Promise<RecruiterSession> {
+  const conversation = await getConversation(id)
   conversation.session = { ...conversation.session, ...patch }
   conversation.updatedAt = Date.now()
   conversations.set(id, conversation)
-  persist()
+  await persistConversation(conversation)
   return conversation.session
 }
 
-export function recordRetrievalOnSession(id: string, sources: Source[], query: string): RecruiterSession {
-  const conversation = getConversation(id)
+export async function recordRetrievalOnSession(id: string, sources: Source[], query: string): Promise<RecruiterSession> {
+  const conversation = await getConversation(id)
   const interests = new Set(conversation.session.interests)
   const projectsViewed = new Set(conversation.session.projectsViewed)
   const experienceViewed = new Set(conversation.session.experienceViewed)
@@ -86,9 +108,7 @@ export function recordRetrievalOnSession(id: string, sources: Source[], query: s
   if (/\b(backend|api|postgres)\b/i.test(query)) interests.add('Backend')
   if (/\b(ai|ml|llm|rag)\b/i.test(query)) interests.add('AI/ML')
   if (/\b(new grad|entry|intern|swe)\b/i.test(query)) interests.add('Entry-level SWE')
-  if (/\bresume|cv\b/i.test(query)) {
-    conversation.session.resumeViewed = true
-  }
+  if (/\bresume|cv\b/i.test(query)) conversation.session.resumeViewed = true
 
   const exploring = [...interests].slice(-2).join(' / ') || 'Overview'
   conversation.session = {
@@ -101,28 +121,39 @@ export function recordRetrievalOnSession(id: string, sources: Source[], query: s
   }
   conversation.updatedAt = Date.now()
   conversations.set(id, conversation)
-  persist()
+  await persistConversation(conversation)
   return conversation.session
 }
 
 export function resetConversationsForTests(): void {
   conversations.clear()
+  loaded = true
 }
 
-function pruneExpired(): void {
-  load()
+async function persistConversation(conversation: Conversation): Promise<void> {
+  if (isPostgresEnabled()) {
+    await saveSession(conversation)
+    await replaceMessages(conversation.id, conversation.messages)
+    return
+  }
+  persistJson()
+}
+
+async function pruneExpired(): Promise<void> {
+  await loadJson()
+  if (isPostgresEnabled()) {
+    await pruneExpiredSessions()
+  }
   const cutoff = Date.now() - config.sessionTtlMs
   for (const [id, conversation] of conversations) {
     if (conversation.updatedAt < cutoff) conversations.delete(id)
   }
 }
 
-let loaded = false
-
-function load(): void {
+async function loadJson(): Promise<void> {
   if (loaded) return
   loaded = true
-  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') return
+  if (isTest() || isPostgresEnabled()) return
   try {
     const raw = fs.readFileSync(storePath, 'utf8')
     const parsed = JSON.parse(raw) as { conversations?: Conversation[] }
@@ -130,16 +161,16 @@ function load(): void {
       conversations.set(conversation.id, conversation)
     }
   } catch {
-    // First boot or ephemeral filesystem.
+    // First boot.
   }
 }
 
-function persist(): void {
-  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') return
+function persistJson(): void {
+  if (isTest() || isPostgresEnabled()) return
   try {
     fs.mkdirSync(path.dirname(storePath), { recursive: true })
     fs.writeFileSync(storePath, JSON.stringify({ conversations: [...conversations.values()] }))
   } catch {
-    // File persistence is best-effort on ephemeral hosts.
+    // Best-effort on ephemeral hosts without DATABASE_URL.
   }
 }

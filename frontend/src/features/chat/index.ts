@@ -1,1 +1,9 @@
-export { ErrorBoundary } from './ErrorBoundary'
+export { ErrorBoundary } from "./ErrorBoundary"
+export { AssistantShell } from "./AssistantShell"
+export { ChatHeader } from "./Header"
+export { WorkInProgressFooter } from "./Footer"
+export { Orb } from "./Orb"
+export { ChatInput } from "./ChatInput"
+export { VoiceView } from "./VoiceView"
+export { ThinkingView } from "./ThinkingView"
+export { AssistantMessage, UserMessage, ErrorMessage } from "./messages"

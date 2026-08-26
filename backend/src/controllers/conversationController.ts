@@ -2,19 +2,23 @@ import type { RequestHandler } from 'express'
 import { createConversation, getConversation, patchSession } from '../services/conversation.ts'
 import { conversationIdParamSchema } from '../utils/validation.ts'
 
-export const postConversation: RequestHandler = (_req, res) => {
-  const conversation = createConversation()
-  res.status(201).json({
-    id: conversation.id,
-    messages: conversation.messages,
-    session: conversation.session,
-  })
+export const postConversation: RequestHandler = async (_req, res, next) => {
+  try {
+    const conversation = await createConversation()
+    res.status(201).json({
+      id: conversation.id,
+      messages: conversation.messages,
+      session: conversation.session,
+    })
+  } catch (error) {
+    next(error)
+  }
 }
 
-export const getConversationById: RequestHandler = (req, res, next) => {
+export const getConversationById: RequestHandler = async (req, res, next) => {
   try {
     const { id } = conversationIdParamSchema.parse(req.params)
-    const conversation = getConversation(id)
+    const conversation = await getConversation(id)
     res.json({
       id: conversation.id,
       messages: conversation.messages,
@@ -25,10 +29,10 @@ export const getConversationById: RequestHandler = (req, res, next) => {
   }
 }
 
-export const patchConversationSession: RequestHandler = (req, res, next) => {
+export const patchConversationSession: RequestHandler = async (req, res, next) => {
   try {
     const { id } = conversationIdParamSchema.parse(req.params)
-    const session = patchSession(id, req.body ?? {})
+    const session = await patchSession(id, req.body ?? {})
     res.json({ id, session })
   } catch (error) {
     next(error)

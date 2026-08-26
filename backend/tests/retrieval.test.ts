@@ -15,8 +15,8 @@ describe('analyzeQuery', () => {
 })
 
 describe('retrieveCandidateContext', () => {
-  it('returns Headstarter, DevDash, and the camera project for AI questions', () => {
-    const result = retrieveCandidateContext('What AI experience does Gad have?')
+  it('returns Headstarter, DevDash, and the camera project for AI questions', async () => {
+    const result = await retrieveCandidateContext('What AI experience does Gad have?')
     const titles = result.sources.map((source) => `${source.organization ?? ''} ${source.title}`)
     expect(titles.some((title) => /Headstarter/i.test(title))).toBe(true)
     expect(titles.some((title) => /DevDash/i.test(title))).toBe(true)
@@ -24,27 +24,27 @@ describe('retrieveCandidateContext', () => {
     expect(result.context).not.toMatch(/Palo Alto/)
   })
 
-  it('includes Shaw when asked about cybersecurity', () => {
-    const result = retrieveCandidateContext('What cybersecurity work has he done?')
+  it('includes Shaw when asked about cybersecurity', async () => {
+    const result = await retrieveCandidateContext('What cybersecurity work has he done?')
     expect(result.sources.some((source) => source.organization === 'Shaw Industries')).toBe(true)
   })
 
-  it('includes contact details when asked how to reach him', () => {
-    const result = retrieveCandidateContext('How can I reach Imani?')
+  it('includes contact details when asked how to reach him', async () => {
+    const result = await retrieveCandidateContext('How can I reach Imani?')
     expect(result.context).toContain('gad.imani@yahoo.com')
     expect(result.context).toContain('404-932-1821')
     expect(result.context).toContain('https://www.linkedin.com/in/igad/')
   })
 
-  it('attaches technologies and metrics to experience sources', () => {
-    const result = retrieveCandidateContext("What's his software engineering experience?")
+  it('attaches technologies and metrics to experience sources', async () => {
+    const result = await retrieveCandidateContext("What's his software engineering experience?")
     const upcancer = result.sources.find((source) => source.organization === 'UpCancer')
     expect(upcancer?.technologies).toContain('PostgreSQL')
     expect(upcancer?.metrics).toContain('+15% throughput')
   })
 
-  it('expands backend questions to APIs, PostgreSQL, Redis, and relevant projects', () => {
-    const result = retrieveCandidateContext('Does he have backend experience?')
+  it('expands backend questions to APIs, PostgreSQL, Redis, and relevant projects', async () => {
+    const result = await retrieveCandidateContext('Does he have backend experience?')
     const blob = result.sources
       .map((source) => `${source.organization ?? ''} ${source.title} ${(source.technologies ?? []).join(' ')}`)
       .join(' ')
@@ -53,8 +53,8 @@ describe('retrieveCandidateContext', () => {
     expect(result.expandedTerms).toEqual(expect.arrayContaining(['api', 'postgresql', 'redis']))
   })
 
-  it('marks unverified technologies such as Kubernetes', () => {
-    const result = retrieveCandidateContext('Does Imani have Kubernetes experience?')
+  it('marks unverified technologies such as Kubernetes', async () => {
+    const result = await retrieveCandidateContext('Does Imani have Kubernetes experience?')
     expect(result.verified).toBe(false)
     expect(result.verificationNote).toMatch(/Kubernetes/i)
   })
@@ -66,10 +66,12 @@ describe('parseStructuredResponse', () => {
       JSON.stringify({
         intro: 'Hello',
         sections: [{ label: 'AI', body: 'RAG work', tags: ['RAG'], metrics: ['5 AI projects'] }],
+        claims: [{ text: 'He built RAG pipelines at Headstarter.', sourceIds: ['experience:headstarter'] }],
       }),
     )
     expect(parsed.intro).toBe('Hello')
     expect(parsed.sections[0].tags).toEqual(['RAG'])
+    expect(parsed.claims?.[0].sourceIds).toEqual(['experience:headstarter'])
   })
 
   it('extracts spoken text when Gemini uses capital JSON keys', () => {

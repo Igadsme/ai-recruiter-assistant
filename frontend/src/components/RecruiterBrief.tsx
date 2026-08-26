@@ -2,24 +2,6 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { fetchBrief, type RecruiterBrief } from '../services/api'
 import { MonoLabel, TechTag } from './ui'
 
-const FALLBACK: RecruiterBrief = {
-  candidate: 'Imani Gad',
-  title: 'Software Engineer',
-  education: 'Bachelor of Science in Computer Science — Kennesaw State University',
-  graduation: 'December 2026',
-  focus: ['AI', 'Software', 'Systems', 'Automation'],
-  coreTechnologies: ['Java', 'Python', 'TypeScript', 'React', 'Node.js', 'PostgreSQL', 'AWS'],
-  relevantExperienceCount: 5,
-  relevantExperienceLabel: 'internships, a fellowship, and a co-op',
-  aiProjectCount: 2,
-  bestFitRoles: ['Software Engineer', 'AI/ML Engineer', 'Backend Engineer', 'Full-Stack Engineer'],
-  availability: 'Available for full-time roles after December 2026 graduation',
-  email: 'gad.imani@yahoo.com',
-  phone: '404-932-1821',
-  linkedin: 'https://www.linkedin.com/in/igad/',
-  github: 'https://github.com/Igadsme',
-}
-
 export function RecruiterBriefCard({
   onAsk,
   onFit,
@@ -31,11 +13,30 @@ export function RecruiterBriefCard({
   onInterview: () => void
   onTimeline: () => void
 }) {
-  const [brief, setBrief] = useState<RecruiterBrief>(FALLBACK)
+  const [brief, setBrief] = useState<RecruiterBrief | null>(null)
 
   useEffect(() => {
     void fetchBrief().then(setBrief).catch(() => undefined)
   }, [])
+
+  if (!brief) {
+    return (
+      <div
+        role="status"
+        style={{
+          width: '100%',
+          maxWidth: 640,
+          borderRadius: 18,
+          border: '1px solid rgba(110,168,255,0.18)',
+          background: 'rgba(255,255,255,0.03)',
+          padding: '22px',
+          color: 'rgba(255,255,255,0.45)',
+        }}
+      >
+        Loading recruiter brief from the candidate API…
+      </div>
+    )
+  }
 
   return (
     <div

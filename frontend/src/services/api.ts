@@ -269,6 +269,42 @@ export async function fetchBrief(): Promise<RecruiterBrief> {
   return payload.brief
 }
 
+export async function fetchProfile(): Promise<{
+  profile: { name: string; title: string; email: string; phone: string; linkedin: string; github: string }
+  education: { school: string; degree: string; expectedGraduation: string }
+}> {
+  const response = await fetch(`${API_BASE}/api/candidate/profile`)
+  if (!response.ok) throw new ApiError('network', NETWORK_ERROR, response.status)
+  return parseJson(response)
+}
+
+export async function fetchExperience(): Promise<Array<{ organization: string; title: string }>> {
+  const response = await fetch(`${API_BASE}/api/candidate/experience`)
+  if (!response.ok) throw new ApiError('network', NETWORK_ERROR, response.status)
+  const payload = await parseJson<{ experience: Array<{ organization: string; title: string }> }>(response)
+  return payload.experience
+}
+
+export async function fetchProjects(): Promise<Array<{ title: string }>> {
+  const response = await fetch(`${API_BASE}/api/candidate/projects`)
+  if (!response.ok) throw new ApiError('network', NETWORK_ERROR, response.status)
+  const payload = await parseJson<{ projects: Array<{ title: string }> }>(response)
+  return payload.projects
+}
+
+export async function fetchSkills(): Promise<string[]> {
+  const response = await fetch(`${API_BASE}/api/candidate/skills`)
+  if (!response.ok) throw new ApiError('network', NETWORK_ERROR, response.status)
+  const payload = await parseJson<{
+    skills: { languages?: string[]; frameworks?: string[]; tools?: string[] }
+  }>(response)
+  return [
+    ...(payload.skills.languages ?? []),
+    ...(payload.skills.frameworks ?? []),
+    ...(payload.skills.tools ?? []),
+  ]
+}
+
 export async function fetchTimeline(): Promise<TimelineNode[]> {
   const response = await fetch(`${API_BASE}/api/candidate/timeline`)
   if (!response.ok) throw new ApiError('network', NETWORK_ERROR, response.status)

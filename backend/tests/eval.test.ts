@@ -31,9 +31,9 @@ describe('evaluation suite', () => {
     }
   })
 
-  it('retrieves the expected employers for factual questions', () => {
+  it('retrieves the expected employers for factual questions', async () => {
     for (const question of EVAL_QUESTIONS.filter((item) => item.mustRetrieve?.length)) {
-      const result = retrieveCandidateContext(question.query)
+      const result = await retrieveCandidateContext(question.query)
       const blob = result.sources.map((source) => `${source.organization ?? ''} ${source.title}`).join(' ')
       for (const needle of question.mustRetrieve ?? []) {
         expect(blob).toMatch(new RegExp(needle, 'i'))
@@ -66,8 +66,8 @@ describe('evaluation suite', () => {
     expect(needsRetrieval('sensitive')).toBe(false)
   })
 
-  it('returns no sources for an unknown employer', () => {
-    const result = retrieveCandidateContext('Did he intern at Google?')
+  it('returns no sources for an unknown employer', async () => {
+    const result = await retrieveCandidateContext('Did he intern at Google?')
     expect(result.insufficient).toBe(true)
     expect(result.sources).toEqual([])
   })

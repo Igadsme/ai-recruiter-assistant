@@ -19,6 +19,12 @@ const mockLlm: LlmClient = {
         metrics: ['5 AI projects'],
       },
     ],
+    claims: [
+      {
+        text: 'He built RAG pipelines during the Headstarter AI fellowship.',
+        sourceIds: ['experience:headstarter'],
+      },
+    ],
   })),
 }
 

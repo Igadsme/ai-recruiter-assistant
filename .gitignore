@@ -18,4 +18,10 @@ logs/
 coverage/
 .data/
 backend/.data/
+test-results/
+playwright-report/
+blob-report/
+frontend/package-lock.json
+backend/package-lock.json
+
 

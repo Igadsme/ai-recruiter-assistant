@@ -80,6 +80,7 @@ export type GeminiStructuredResponse = {
   intro: string
   sections: MessageSection[]
   isResume?: boolean
+  claims?: Array<{ text: string; sourceIds: string[] }>
 }
 
 export type RetrievalStage = {

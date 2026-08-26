@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
-import { useState } from 'react'
-import type { RecruiterSummary, RetrievalStage, Source } from '../services/api'
+import { useEffect, useState } from 'react'
+import { fetchBrief, type RecruiterSummary, type RetrievalStage, type Source } from '../services/api'
 import { RecruiterSummaryCard } from './RecruiterCards'
 import { SourcesList } from './SourcesList'
 import { MonoLabel } from './ui'
@@ -48,6 +48,12 @@ export function ContactCta({
   onResume: () => void
   onContact: () => void
 }) {
+  const [github, setGithub] = useState('https://github.com/Igadsme')
+  useEffect(() => {
+    void fetchBrief()
+      .then((brief) => setGithub(brief.github))
+      .catch(() => undefined)
+  }, [])
   return (
     <div
       style={{
@@ -66,7 +72,7 @@ export function ContactCta({
         <button type="button" onClick={onResume} style={ctaStyle}>
           View resume
         </button>
-        <a href="https://github.com/Igadsme" target="_blank" rel="noreferrer" style={{ ...ctaStyle, textDecoration: 'none' }}>
+        <a href={github} target="_blank" rel="noreferrer" style={{ ...ctaStyle, textDecoration: 'none' }}>
           GitHub
         </a>
         <button type="button" onClick={onContact} style={ctaStyle}>

@@ -15,6 +15,7 @@ export const GEMINI_MODEL_FALLBACKS = [
   'gemini-3.5-flash-lite',
   'gemini-flash-latest',
   'gemini-3.6-flash',
+  'gemini-1.5-flash-lite',
 ]
 
 export function resolveGeminiModel(raw?: string): string {
@@ -72,5 +73,11 @@ export const config = {
   },
   get databaseUrl() {
     return process.env.DATABASE_URL ?? ''
+  },
+  get embeddingModel() {
+    return process.env.GEMINI_EMBEDDING_MODEL ?? 'gemini-embedding-001'
+  },
+  get embeddingDimensions() {
+    return Number(process.env.GEMINI_EMBEDDING_DIMENSIONS ?? 768)
   },
 }

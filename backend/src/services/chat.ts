@@ -22,7 +22,7 @@ import {
 } from './retrieval.ts'
 import { detectPromptInjection, wrapUntrustedData } from './security.ts'
 import { resolveFollowUpQuery } from './followUp.ts'
-import { insufficientEvidenceReply, verifyClaims } from './verify.ts'
+import { insufficientEvidenceReply, validateStructuredClaims } from './verify.ts'
 import { analyzeFit } from './fit.ts'
 import { recordMetric } from './metrics.ts'
 import { getLlmClient, parseStructuredResponse } from './gemini.ts'
@@ -50,7 +50,7 @@ export async function handleChat(input: {
   mode: ChatMode
 }): Promise<ChatResponse> {
   const started = Date.now()
-  const conversation = getOrCreateConversation(input.conversationId)
+  const conversation = await getOrCreateConversation(input.conversationId)
 
   if (detectPromptInjection(input.message)) {
     const message = injectionReply()
@@ -61,7 +61,7 @@ export async function handleChat(input: {
       intent: 'unsupported',
       followUps: casualFollowUps('assistant'),
     })
-    persistTurn(conversation.id, input.message, message)
+    await persistTurn(conversation.id, input.message, message)
     recordMetric('injection_blocked', Date.now() - started)
     return response
   }
@@ -78,7 +78,7 @@ export async function handleChat(input: {
       intent,
       followUps: casualFollowUps(intent),
     })
-    persistTurn(conversation.id, input.message, message)
+    await persistTurn(conversation.id, input.message, message)
     recordMetric('casual_reply', Date.now() - started)
     return response
   }
@@ -93,7 +93,7 @@ export async function handleChat(input: {
       followUps: casualFollowUps(intent),
       clarifying: true,
     })
-    persistTurn(conversation.id, input.message, message)
+    await persistTurn(conversation.id, input.message, message)
     return response
   }
 
@@ -106,7 +106,7 @@ export async function handleChat(input: {
       intent,
       followUps: casualFollowUps('assistant'),
     })
-    persistTurn(conversation.id, input.message, message)
+    await persistTurn(conversation.id, input.message, message)
     return response
   }
 
@@ -119,7 +119,7 @@ export async function handleChat(input: {
       intent,
       followUps: casualFollowUps('assistant'),
     })
-    persistTurn(conversation.id, input.message, message)
+    await persistTurn(conversation.id, input.message, message)
     return response
   }
 
@@ -133,21 +133,21 @@ export async function handleChat(input: {
       intent,
       followUps: casualFollowUps(intent),
     })
-    persistTurn(conversation.id, input.message, message)
+    await persistTurn(conversation.id, input.message, message)
     return response
   }
 
   if (intent === 'resume') {
-    const updated = patchSession(conversation.id, { resumeViewed: true })
+    const updated = await patchSession(conversation.id, { resumeViewed: true })
     trackEvent({ type: 'resume_viewed', conversationId: conversation.id })
     const response = buildResumeResponse(conversation.id, updated)
-    persistTurn(conversation.id, input.message, response.message)
+    await persistTurn(conversation.id, input.message, response.message)
     return response
   }
 
   if (intent === 'fit_analysis') {
     const analysis = analyzeFit(input.message)
-    const session = recordRetrievalOnSession(conversation.id, [], input.message)
+    const session = await recordRetrievalOnSession(conversation.id, [], input.message)
     trackEvent({ type: 'fit_analyzed', conversationId: conversation.id })
     const message = [
       `Overall match: ${analysis.overallScore}/100 for ${analysis.roleHint}.`,
@@ -157,7 +157,7 @@ export async function handleChat(input: {
         : 'No missing required tools jumped out of this posting.',
       analysis.whyInterview,
     ].join(' ')
-    persistTurn(conversation.id, input.message, message)
+    await persistTurn(conversation.id, input.message, message)
     return {
       ...conversationalResponse({
         conversationId: conversation.id,
@@ -182,7 +182,7 @@ export async function handleChat(input: {
       intent,
       followUps: ['Tell me about DevDash', 'What backend experience does he have?', 'Why should we hire him?'],
     })
-    persistTurn(conversation.id, input.message, message)
+    await persistTurn(conversation.id, input.message, message)
     return response
   }
 
@@ -191,15 +191,15 @@ export async function handleChat(input: {
     conversation.messages,
   )
   const retrieval = needsRetrieval(intent)
-    ? retrieveCandidateContext(retrievalQuery, { intent })
+    ? await retrieveCandidateContext(retrievalQuery, { intent })
     : emptyRetrieval()
-  const session = recordRetrievalOnSession(conversation.id, retrieval.sources, input.message)
+  const session = await recordRetrievalOnSession(conversation.id, retrieval.sources, input.message)
   trackEvent({ type: 'question_asked', query: input.message, conversationId: conversation.id })
 
   if (intent === 'proof') {
     const message = proofReply(conversation.messages.some((item) => item.role === 'user'))
     const response = buildProofResponse(conversation.id, session, retrieval, message)
-    persistTurn(conversation.id, input.message, message)
+    await persistTurn(conversation.id, input.message, message)
     return response
   }
 
@@ -212,7 +212,7 @@ export async function handleChat(input: {
       intent,
       followUps: casualFollowUps('assistant'),
     })
-    persistTurn(conversation.id, input.message, message)
+    await persistTurn(conversation.id, input.message, message)
     return { ...response, conversational: false, verified: false, verificationNote: retrieval.verificationNote }
   }
 
@@ -225,7 +225,7 @@ export async function handleChat(input: {
       intent,
       followUps: casualFollowUps(intent),
     })
-    persistTurn(conversation.id, input.message, message)
+    await persistTurn(conversation.id, input.message, message)
     return response
   }
 
@@ -255,9 +255,12 @@ export async function handleChat(input: {
     ),
   )
 
-  const verification = verifyClaims(spoken, retrieval.sources)
+  const verification = generated.claims?.length
+    ? validateStructuredClaims(generated.claims, retrieval.sources)
+    : { claims: [], unsupportedRate: 0 }
+  const claimsMissing = !generated.claims?.length
   const grounded =
-    verification.unsupportedRate > 0.5 && retrieval.sources.length > 0
+    !claimsMissing && verification.unsupportedRate > 0.5
       ? insufficientEvidenceReply()
       : spoken
 
@@ -274,7 +277,8 @@ export async function handleChat(input: {
     sources: retrieval.sources.slice(0, 8),
     conversationId: conversation.id,
     isResume,
-    verified: retrieval.verified && verification.unsupportedRate < 0.35,
+    verified:
+      retrieval.verified && !claimsMissing && verification.unsupportedRate < 0.35,
     verificationNote: retrieval.verificationNote,
     followUps: buildFollowUps(input.message, retrieval.sources),
     retrievalStages: retrieval.stages,
@@ -290,14 +294,14 @@ export async function handleChat(input: {
     claims: verification.claims,
   }
 
-  persistTurn(conversation.id, input.message, grounded)
+  await persistTurn(conversation.id, input.message, grounded)
   recordMetric('grounded_reply', Date.now() - started)
   return response
 }
 
-function persistTurn(conversationId: string, userMessage: string, assistantMessage: string): void {
-  appendMessage(conversationId, { role: 'user', content: userMessage })
-  appendMessage(conversationId, { role: 'assistant', content: assistantMessage })
+async function persistTurn(conversationId: string, userMessage: string, assistantMessage: string): Promise<void> {
+  await appendMessage(conversationId, { role: 'user', content: userMessage })
+  await appendMessage(conversationId, { role: 'assistant', content: assistantMessage })
 }
 
 function flattenChatMessage(raw: string): string {

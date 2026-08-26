@@ -1,8 +1,9 @@
-export { ErrorBoundary } from './ErrorBoundary'
-export { RecruiterJourney } from '../recruiter/RecruiterJourney'
-export { FitPanel } from '../fit-analysis/FitPanel'
-export { InterviewPanel } from '../../components/InterviewPanel'
-export { CareerTimeline } from '../../components/CareerTimeline'
-export { SourcesDisclosure } from '../../components/ChatExtras'
-export { useSpeechRecognition } from '../../hooks/useSpeechRecognition'
-export { useSpeechSynthesis } from '../../hooks/useSpeechSynthesis'
+export { ErrorBoundary } from "./chat/ErrorBoundary"
+export { RecruiterJourney } from "./recruiter/RecruiterJourney"
+export { FitPanel } from "./fit-analysis/FitPanel"
+export { InterviewPanel } from "../components/InterviewPanel"
+export { CareerTimeline } from "../components/CareerTimeline"
+export { SourcesDisclosure } from "../components/ChatExtras"
+export { useSpeechRecognition } from "../hooks/useSpeechRecognition"
+export { useSpeechSynthesis } from "../hooks/useSpeechSynthesis"
+export { AssistantShell } from "./chat/AssistantShell"

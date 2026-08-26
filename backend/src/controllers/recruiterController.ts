@@ -10,7 +10,7 @@ import { analyticsEventSchema, fitRequestSchema, interviewRequestSchema } from '
 import { detectPromptInjection, wrapUntrustedData } from '../services/security.ts'
 import { metricsSnapshot } from '../services/metrics.ts'
 
-export const postFit: RequestHandler = (req, res, next) => {
+export const postFit: RequestHandler = async (req, res, next) => {
   try {
     const body = fitRequestSchema.parse(req.body)
     if (detectPromptInjection(body.jobDescription)) {
@@ -20,8 +20,8 @@ export const postFit: RequestHandler = (req, res, next) => {
     const analysis = analyzeFit(body.jobDescription)
     trackEvent({ type: 'fit_analyzed', conversationId: body.conversationId })
     if (body.conversationId) {
-      const retrieval = retrieveCandidateContext(body.jobDescription.slice(0, 400))
-      recordRetrievalOnSession(body.conversationId, retrieval.sources, 'job description fit')
+      const retrieval = await retrieveCandidateContext(body.jobDescription.slice(0, 400))
+      await recordRetrievalOnSession(body.conversationId, retrieval.sources, 'job description fit')
     }
     res.json({ analysis })
   } catch (error) {

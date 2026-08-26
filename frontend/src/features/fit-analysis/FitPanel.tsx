@@ -79,7 +79,7 @@ export function FitPanel({
               {analysis.requiredCoverage && (
                 <>
                   {' '}
-                  · Required {analysis.requiredCoverage.percent}% · Preferred {analysis.preferredCoverage.percent}%
+                  · Required {analysis.requiredCoverage.percent}% · Preferred {analysis.preferredCoverage?.percent ?? 0}%
                 </>
               )}
             </p>

@@ -15,7 +15,21 @@ services:
         sync: false
       - key: GEMINI_MODEL
         value: gemini-flash-lite-latest
+      - key: GEMINI_EMBEDDING_MODEL
+        value: gemini-embedding-001
+      - key: GEMINI_EMBEDDING_DIMENSIONS
+        value: "768"
       - key: LOG_LEVEL
         value: info
       - key: ANALYTICS_KEY
         sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: imanigad-db
+          property: connectionString
+
+databases:
+  - name: imanigad-db
+    plan: basic-256mb
+    postgresMajorVersion: 16
+    ipAllowList: []

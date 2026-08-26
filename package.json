@@ -10,7 +10,11 @@
     "dev:backend": "node ./backend/node_modules/tsx/dist/cli.mjs ./backend/src/index.ts",
     "build": "pnpm --filter frontend build && pnpm --filter backend build",
     "start": "pnpm --filter backend start",
-    "test": "pnpm --filter backend test && pnpm --filter frontend test"
+    "test": "pnpm --filter backend test && pnpm --filter frontend test",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["esbuild", "protobufjs"]

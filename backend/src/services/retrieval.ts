@@ -8,7 +8,7 @@ import {
   skills,
   story,
 } from '../data/candidate/index.ts'
-import { cosineSimilarity, embedText } from './embeddings.ts'
+import { cosineSimilarity, embedQuery, getEmbeddingsClient, persistDocumentEmbeddings, restoreDocumentEmbeddings } from './embeddings.ts'
 import type { CandidateCategory, ConversationIntent, RetrievalStage, Source, SourceType } from '../types.ts'
 
 export type RetrievalResult = {
@@ -80,10 +80,37 @@ const CHUNKS: Chunk[] = buildChunks()
 const DOC_TOKENS = CHUNKS.map((chunk) => tokenize(`${chunk.text} ${chunk.aliases.join(' ')}`))
 const IDF = buildIdf(DOC_TOKENS)
 const CHUNK_VECTORS = DOC_TOKENS.map((tokens) => sparseTfidf(tokens))
-const CHUNK_EMBEDDINGS = CHUNKS.map((chunk) => embedText(`${chunk.text} ${chunk.aliases.join(' ')}`))
+let CHUNK_EMBEDDINGS: number[][] = []
+let embeddingsReady: Promise<void> | null = null
 const KNOWN_ORGS = new Set(
   CHUNKS.flatMap((chunk) => [chunk.organization, chunk.title].filter(Boolean).map((value) => value!.toLowerCase())),
 )
+
+async function ensureChunkEmbeddings(): Promise<void> {
+  if (CHUNK_EMBEDDINGS.length === CHUNKS.length) return
+  if (embeddingsReady) return embeddingsReady
+  embeddingsReady = (async () => {
+    const restored = await restoreDocumentEmbeddings()
+    if (restored.length === CHUNKS.length) {
+      CHUNK_EMBEDDINGS = CHUNKS.map((chunk) => restored.find((item) => item.id === chunk.id)?.embedding ?? [])
+      if (CHUNK_EMBEDDINGS.every((item) => item.length > 0)) return
+    }
+    const client = getEmbeddingsClient()
+    CHUNK_EMBEDDINGS = await client.embed(CHUNKS.map((chunk) => `${chunk.text} ${chunk.aliases.join(' ')}`))
+    await persistDocumentEmbeddings(
+      CHUNKS.map((chunk, index) => ({
+        id: chunk.id,
+        kind: chunk.type,
+        title: chunk.title,
+        organization: chunk.organization,
+        body: chunk.excerpt,
+        metadata: { technologies: chunk.technologies, categories: chunk.categories },
+        embedding: CHUNK_EMBEDDINGS[index],
+      })),
+    )
+  })()
+  return embeddingsReady
+}
 
 function buildChunks(): Chunk[] {
   const chunks: Chunk[] = [
@@ -360,19 +387,24 @@ export function analyzeQuery(query: string): CandidateCategory[] {
   return [...intents]
 }
 
-export function retrieveCandidateContext(
+export async function warmupRetrieval(): Promise<void> {
+  await ensureChunkEmbeddings()
+}
+
+export async function retrieveCandidateContext(
   query: string,
   options: { intent?: ConversationIntent } = {},
-): RetrievalResult {
+): Promise<RetrievalResult> {
+  await ensureChunkEmbeddings()
   const intents = analyzeQuery(query)
   const expandedTerms = expandQuery(query)
   const queryVector = sparseTfidf(expandedTerms)
-  const queryEmbedding = embedText(query)
+  const queryEmbedding = await embedQuery(query)
   const typeFilter = typeFilterForIntent(options.intent)
   const ranked = CHUNKS.map((chunk, index) => {
     const keywordScore = keywordRank(expandedTerms, chunk)
     const semanticScore = sparseCosine(queryVector, CHUNK_VECTORS[index])
-    const embeddingScore = cosineSimilarity(queryEmbedding, CHUNK_EMBEDDINGS[index])
+    const embeddingScore = cosineSimilarity(queryEmbedding, CHUNK_EMBEDDINGS[index] ?? [])
     const intentBoost = intentScore(intents, chunk)
     const penalty = intentPenalty(intents, chunk)
     const typeBoost = typeFilter && chunk.type === typeFilter ? 0.12 : 0

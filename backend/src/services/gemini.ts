@@ -124,10 +124,24 @@ export function parseStructuredResponse(raw: string): GeminiStructuredResponse {
     return { intro: trimmed.startsWith('{') ? '' : trimmed, sections: [] }
   }
 
+  const claims = Array.isArray(parsed.claims)
+    ? parsed.claims
+        .filter((item) => item && typeof item === 'object')
+        .map((item) => {
+          const claim = item as Record<string, unknown>
+          return {
+            text: String(claim.text ?? claim.claim ?? '').trim(),
+            sourceIds: Array.isArray(claim.sourceIds) ? claim.sourceIds.map(String) : [],
+          }
+        })
+        .filter((item) => item.text)
+    : undefined
+
   return {
     intro,
     sections,
     isResume: Boolean(parsed.isResume ?? parsed.IsResume),
+    claims,
   }
 }
 
@@ -195,6 +209,8 @@ function buildUserTurn(input: GenerateChatInput): string {
     'When talking about Imani, use he/him. You may say "I\'m Imani\'s AI assistant" only if they asked who you are.',
     'If a fact is not in the context, say: "I don\'t have that information, but you can ask Imani directly."',
     'Name specific roles and projects from the context when you make a claim.',
+    'Reply as JSON: {"intro":"...","claims":[{"text":"...","sourceIds":["experience:shaw"]}]}',
+    'Every factual sentence needs a claims[] entry whose sourceIds exist in the context.',
     input.mode === 'recruiter'
       ? 'Recruiter mode: tighter, evidence-first, no filler. Recruiters already have the brief — do not repeat his full life story unless asked.'
       : '',

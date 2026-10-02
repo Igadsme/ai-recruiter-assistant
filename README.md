@@ -20,7 +20,7 @@ Backend API  (Express + TypeScript)
     └── Gemini Service           (server-side only)
 ```
 
-Production uses a single Render web service: the API serves `frontend/dist` and `/api/*`. Attach PostgreSQL so conversations, analytics, and embeddings survive deploys.
+Production uses a single Railway service: the API serves `frontend/dist` and `/api/*`. Attach PostgreSQL so conversations, analytics, and embeddings survive deploys.
 
 ## Recruiter journey
 
@@ -47,7 +47,7 @@ Production uses a single Render web service: the API serves `frontend/dist` and 
 - **Data:** PostgreSQL + pgvector (JSON files only when `DATABASE_URL` is unset / tests)
 - **Tests:** Vitest, Supertest, Testing Library, Playwright
 - **CI:** GitHub Actions (typecheck, tests, format, audit, secret scan, e2e)
-- **Deploy:** Render (`render.yaml`)
+- **Deploy:** Railway (`railway.json`)
 
 ## Project structure
 
@@ -57,7 +57,7 @@ project/
 ├── backend/           API, retrieval, Gemini, PostgreSQL, candidate data
 ├── e2e/               Playwright recruiter workflow
 ├── package.json
-├── render.yaml
+├── railway.json
 └── README.md
 ```
 
@@ -120,25 +120,30 @@ NODE_ENV=production pnpm start
 
 On boot the API runs SQL migrations, then warms Gemini embeddings into `documents`.
 
-## Deploy to Render
+## Deploy to Railway
 
-1. Push this repository to GitHub.
-2. Create a Blueprint from `render.yaml`, or a Node web service plus a PostgreSQL database.
-3. Set environment variables (do not add `VITE_*` Gemini keys):
+1. Push this repository to GitHub, then create a Railway project from the repository with the repository root as the service root.
+2. Add a PostgreSQL service. In the app service, set `DATABASE_URL` to the PostgreSQL service's `DATABASE_URL` reference (for example, `${{Postgres.DATABASE_URL}}`, using the actual service name).
+3. Set the app service variables below. Do not add `VITE_*` Gemini keys:
 
 | Variable | Required | Notes |
 | --- | --- | --- |
 | `GEMINI_API_KEY` | Yes | Server-side only |
-| `DATABASE_URL` | Yes in production | Render Postgres connection string |
-| `FRONTEND_URL` | Yes in production | Public site URL |
+| `DATABASE_URL` | Yes in production | Reference the Railway PostgreSQL service |
+| `FRONTEND_URL` | Yes in production | Railway public URL, with `https://` |
 | `NODE_ENV` | Yes | `production` |
 | `GEMINI_MODEL` | No | Default `gemini-flash-lite-latest` |
 | `GEMINI_EMBEDDING_MODEL` | No | Default `gemini-embedding-001` |
-| `PORT` | No | Render sets this |
+| `PORT` | No | Railway sets this |
 | `LOG_LEVEL` | No | Default `info` |
 | `ANALYTICS_KEY` | No | Protects `/api/analytics` |
 
-Leave `VITE_API_URL` unset in production so the UI uses same-origin `/api`.
+4. Generate a public domain for the app service and set `FRONTEND_URL` to that URL. Railway uses `railway.json` to build the frontend and backend, start the API, and check `/api/health`.
+5. Leave `VITE_API_URL` unset in production so the UI uses same-origin `/api`.
+
+### Moving the existing Render database
+
+The Railway deployment does not copy data from Render. Before switching traffic, export the Render PostgreSQL database and restore it to Railway's PostgreSQL service with PostgreSQL's `pg_dump` and `pg_restore` tools. Use Render's external database connection string for the export, and ensure the target database has the `pgvector` extension available before restoring; the app can run without pgvector, but vector embeddings will use the fallback schema. Keep the Render service and database until you've verified the Railway app, conversations, analytics, and embeddings.
 
 ## Environment variables
 

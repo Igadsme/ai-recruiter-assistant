@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "description": "AI recruiter assistant for Imani Gad",
+  "engines": {
+    "node": ">=22.12.0 <23"
+  },
   "packageManager": "pnpm@10.34.3",
   "scripts": {
     "dev": "node start-local.mjs",

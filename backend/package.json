@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node dist/index.js",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/copy-schema.mjs",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest"
